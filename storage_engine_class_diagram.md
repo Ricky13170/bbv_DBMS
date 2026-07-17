@@ -9,7 +9,7 @@ classDiagram
     %% ==========================================
     %% STORAGE ENGINE SUBSYSTEM
     %% ==========================================
-    namespace StorageEngine {
+    namespace StorageSubsystem {
         class StorageEngine {
             +initialize()
             +shutdown()
