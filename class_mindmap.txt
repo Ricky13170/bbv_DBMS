@@ -1,0 +1,74 @@
+Database Management System
+│
+├── Storage Management
+│   ├── StorageEngine
+│   ├── FileManager
+│   ├── PageManager
+│   ├── BufferPool
+│   ├── RecordManager
+│   ├── IndexManager
+│   ├── BTree
+│   └── StorageAllocator
+│
+├── Database Objects
+│   ├── CatalogManager
+│   ├── DatabaseCatalog
+│   ├── SchemaManager
+│   ├── TableManager
+│   ├── ColumnManager
+│   ├── ConstraintManager
+│   ├── ViewManager
+│   └── SequenceManager
+│
+├── Query Processing
+│   ├── SQLParser
+│   ├── Lexer
+│   ├── AST
+│   ├── SemanticAnalyzer
+│   ├── QueryOptimizer
+│   ├── CostEstimator
+│   ├── ExecutionPlanner
+│   └── QueryExecutor
+│
+├── Transaction Management
+│   ├── TransactionManager
+│   ├── Transaction
+│   ├── LockManager
+│   ├── Lock
+│   ├── DeadlockDetector
+│   └── MVCCManager
+│
+├── Recovery & Logging
+│   ├── LogManager
+│   ├── WALManager
+│   ├── RecoveryManager
+│   └── CheckpointManager
+│
+├── Security
+│   ├── AuthenticationManager
+│   ├── AuthorizationManager
+│   ├── UserManager
+│   ├── RoleManager
+│   ├── PermissionManager
+│   └── AuditManager
+│
+├── Communication
+│   ├── ConnectionManager
+│   ├── Session
+│   ├── SQLDispatcher
+│   ├── ProtocolHandler
+│   └── TCPServer
+│
+├── Administration
+│   ├── BackupManager
+│   ├── RestoreManager
+│   ├── ConfigurationManager
+│   ├── MonitoringManager
+│   ├── StatisticsManager
+│   └── MaintenanceManager
+│
+└── Utilities
+    ├── ImportManager
+    ├── ExportManager
+    ├── MigrationManager
+    └── DiagnosticManager

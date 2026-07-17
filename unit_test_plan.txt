@@ -1,0 +1,281 @@
+========================================
+UNIT TEST PLAN (METHOD-BASED) FOR DBMS_BBV
+========================================
+
+1. Storage Management
+StorageEngine
+- InitializeEngine()
+- ShutdownEngine()
+- GetEngineStatus()
+
+FileManager
+- CreateFile()
+- OpenFile()
+- CloseFile()
+- DeleteFile()
+- ReadBlock()
+- WriteBlock()
+- ExpandFile()
+
+PageManager
+- AllocatePage()
+- ReadPage()
+- WritePage()
+- FreePage()
+- SplitPage()
+- MergePage()
+- CompressPage()
+- EncryptPage()
+
+BufferPool
+- FetchPage()
+- FlushPage()
+- FlushAllPages()
+- PinPage()
+- UnpinPage()
+- EvictPage()
+
+RecordManager
+- InsertRecord()
+- ReadRecord()
+- UpdateRecord()
+- DeleteRecord()
+- ScanRecords()
+
+IndexManager
+- CreateIndex()
+- DropIndex()
+- RebuildIndex()
+
+BTree
+- InsertNode()
+- DeleteNode()
+- SearchKey()
+- SplitNode()
+- MergeNode()
+
+StorageAllocator
+- AllocateExtent()
+- ReleaseExtent()
+- GetFreeSpace()
+
+2. Database Objects
+CatalogManager
+- ReadMetadata()
+- WriteMetadata()
+- RefreshCatalog()
+
+DatabaseCatalog
+- AddDatabase()
+- DropDatabase()
+- GetDatabaseInfo()
+
+SchemaManager
+- CreateSchema()
+- DropSchema()
+- GetSchemaObjects()
+
+TableManager
+- CreateTable()
+- DropTable()
+- AlterTable()
+
+ColumnManager
+- AddColumn()
+- DropColumn()
+- ModifyColumn()
+- ValidateDataType()
+
+ConstraintManager
+- AddPrimaryKey()
+- AddForeignKey()
+- CheckConstraint()
+- DropConstraint()
+
+ViewManager
+- CreateView()
+- DropView()
+- ResolveViewQuery()
+
+SequenceManager
+- CreateSequence()
+- GetNextValue()
+- ResetSequence()
+
+3. Query Processing
+SQLParser
+- ParseQuery()
+- ValidateAbstractSyntaxTree()
+
+Lexer
+- Tokenize()
+- IdentifyKeywords()
+
+AST
+- BuildNode()
+- TraverseAST()
+
+SemanticAnalyzer
+- AnalyzeSemantics()
+- CheckPrivileges()
+- ResolveIdentifiers()
+
+QueryOptimizer
+- OptimizeLogicalPlan()
+- OptimizePhysicalPlan()
+
+CostEstimator
+- EstimateScanCost()
+- EstimateJoinCost()
+
+ExecutionPlanner
+- GeneratePlan()
+
+QueryExecutor
+- ExecuteSelect()
+- ExecuteInsert()
+- ExecuteUpdate()
+- ExecuteDelete()
+
+4. Transaction Management
+TransactionManager
+- BeginTransaction()
+- CommitTransaction()
+- RollbackTransaction()
+- GetTransactionState()
+
+Transaction
+- SetIsolationLevel()
+- AssignTransactionID()
+
+LockManager
+- AcquireLock()
+- ReleaseLock()
+- EscalateLock()
+
+Lock
+- CheckConflict()
+- WaitQueueUpdate()
+
+DeadlockDetector
+- DetectCycle()
+- SelectVictim()
+
+MVCCManager
+- CreateVersion()
+- CheckVisibility()
+- CollectGarbage()
+
+5. Recovery & Logging
+LogManager
+- WriteLogRecord()
+- FlushLogSection()
+
+WALManager
+- AppendWAL()
+- TruncateWAL()
+- ReplayWAL()
+
+RecoveryManager
+- PerformRedoPhase()
+- PerformUndoPhase()
+- RecoverFromCrash()
+
+CheckpointManager
+- CreateCheckpoint()
+- ScheduleFuzzyCheckpoint()
+
+6. Security
+AuthenticationManager
+- AuthenticateUser()
+- VerifyPassword()
+
+AuthorizationManager
+- CheckPermission()
+- EnforcePolicy()
+
+UserManager
+- CreateUser()
+- DropUser()
+- ChangePassword()
+
+RoleManager
+- CreateRole()
+- AssignRoleToUser()
+- RevokeRole()
+
+PermissionManager
+- GrantPermission()
+- RevokePermission()
+
+AuditManager
+- LogAuditEvent()
+- FilterAuditLogs()
+
+7. Communication
+ConnectionManager
+- AcceptConnection()
+- DropConnection()
+- GetActiveConnections()
+
+Session
+- InitializeSession()
+- SetSessionVariables()
+- KillSession()
+
+SQLDispatcher
+- DispatchQuery()
+- HandleSyntaxError()
+
+ProtocolHandler
+- ParseClientRequest()
+- FormatServerResponse()
+- HandleSSLHandshake()
+
+TCPServer
+- StartServer()
+- StopServer()
+
+8. Administration
+BackupManager
+- PerformFullBackup()
+- PerformIncrementalBackup()
+
+RestoreManager
+- RestoreFromFull()
+- RestoreFromIncremental()
+
+ConfigurationManager
+- LoadConfig()
+- ReloadDynamicConfig()
+- UpdateParameter()
+
+MonitoringManager
+- CollectMetrics()
+- GetActiveSessions()
+
+StatisticsManager
+- UpdateStatistics()
+- ReadStatistics()
+
+MaintenanceManager
+- RebuildIndexes()
+- VacuumDatabase()
+
+9. Utilities
+ImportManager
+- ImportFromCSV()
+- ImportFromJSON()
+- BulkLoad()
+
+ExportManager
+- ExportToCSV()
+- ExportToJSON()
+
+MigrationManager
+- MigrateSchemaUp()
+- MigrateSchemaDown()
+
+DiagnosticManager
+- RunHealthCheck()
+- GenerateDiagnosticReport()

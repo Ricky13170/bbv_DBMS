@@ -1,0 +1,72 @@
+Database Management System
+│
+├── Storage Management
+│   ├── File Storage
+│   ├── Page Management
+│   ├── Buffer Management
+│   ├── Record Storage
+│   ├── Indexing
+│   └── Space Allocation
+│
+├── Database Objects
+│   ├── Database
+│   ├── Schema
+│   ├── Table
+│   ├── Column
+│   ├── Constraint
+│   ├── View
+│   ├── Sequence
+│   └── Trigger
+│
+├── Query Processing
+│   ├── SQL Parsing
+│   ├── Validation
+│   ├── Query Rewriting
+│   ├── Optimization
+│   ├── Execution Planning
+│   ├── Execution
+│   └── Result Processing
+│
+├── Transaction Management
+│   ├── Transaction Control
+│   ├── Locking
+│   ├── Isolation
+│   ├── Deadlock Detection
+│   ├── MVCC
+│   └── Concurrency Control
+│
+├── Recovery & Logging
+│   ├── Write Ahead Logging
+│   ├── Checkpoint
+│   ├── Undo
+│   ├── Redo
+│   └── Crash Recovery
+│
+├── Security
+│   ├── Authentication
+│   ├── Authorization
+│   ├── Roles
+│   ├── Permissions
+│   ├── Encryption
+│   └── Auditing
+│
+├── Communication
+│   ├── Network Server
+│   ├── Connection
+│   ├── Session
+│   ├── SQL Protocol
+│   └── Client API
+│
+├── Administration
+│   ├── Configuration
+│   ├── Monitoring
+│   ├── Backup
+│   ├── Restore
+│   ├── Statistics
+│   └── Maintenance
+│
+└── Utilities
+    ├── Import
+    ├── Export
+    ├── Data Migration
+    └── Diagnostic Tools
