@@ -46,6 +46,7 @@ classDiagram
     class ConstraintManager
     class ViewManager
     class SequenceManager
+    class TriggerManager
 
     %% ==========================================
     %% 5. Transaction Management
@@ -127,8 +128,7 @@ classDiagram
 
     %% Query Execution Interactions
     QueryExecutor --> TransactionManager
-    QueryExecutor --> RecordManager
-    QueryExecutor --> IndexManager
+    QueryExecutor --> StorageEngine
     QueryExecutor --> CatalogManager
 
     %% Database Catalog & Objects Flow
@@ -137,6 +137,7 @@ classDiagram
     SchemaManager --> TableManager
     SchemaManager --> ViewManager
     SchemaManager --> SequenceManager
+    SchemaManager --> TriggerManager
     TableManager --> ColumnManager
     TableManager --> ConstraintManager
 
@@ -152,6 +153,8 @@ classDiagram
     StorageEngine --> RecordManager
     StorageEngine --> IndexManager
     StorageEngine --> BufferPool
+    RecordManager --> BufferPool
+    IndexManager --> BufferPool
     IndexManager --> BTree
     BufferPool --> PageManager
     PageManager --> FileManager

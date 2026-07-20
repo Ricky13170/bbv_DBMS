@@ -18,7 +18,8 @@ Database Management System
 │   ├── ColumnManager
 │   ├── ConstraintManager
 │   ├── ViewManager
-│   └── SequenceManager
+│   ├── SequenceManager
+│   └── TriggerManager
 │
 ├── Query Processing
 │   ├── SQLParser
