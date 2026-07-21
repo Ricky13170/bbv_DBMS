@@ -1,6 +1,7 @@
 from typing import List, Dict
 from .column import Column
 from .row import Row
+from .constraint import IConstraintValidator, ConstraintViolationException
 
 
 class DuplicateColumnException(Exception):
@@ -20,6 +21,10 @@ class Table:
         self.name = name
         self._columns: Dict[str, Column] = {}
         self._rows: List[Row] = []
+        self._validators: List[IConstraintValidator] = []
+
+    def add_validator(self, validator: IConstraintValidator) -> None:
+        self._validators.append(validator)
 
     def add_column(self, column: Column) -> None:
         if column.name in self._columns:
@@ -39,5 +44,9 @@ class Table:
             raise ColumnMismatchException(
                 f"Row length {len(row.values)} does not match table columns {len(self._columns)}."
             )
+
+        for validator in self._validators:
+            validator.validate(row)
+
         self._rows.append(row)
 

@@ -13,8 +13,11 @@ Database Management System
 ├── Database Objects
 │   ├── CatalogManager
 │   ├── DatabaseCatalog
+│   ├── SchemaBuilder
 │   ├── SchemaManager
+│   ├── TableBuilder
 │   ├── TableManager
+│   ├── ColumnBuilder
 │   ├── ColumnManager
 │   ├── ConstraintManager
 │   ├── ViewManager
