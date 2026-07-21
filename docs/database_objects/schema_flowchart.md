@@ -10,7 +10,7 @@ flowchart TD
     GetName --> CheckName{Is table_name in _tables dictionary?}
     
     CheckName -- Yes --> ThrowErr[Raise DuplicateTableNameException]
-    CheckName -- No --> Map[Store: _tables[table_name] = table]
+    CheckName -- No --> Map["Store: _tables[table_name] = table"]
     Map --> Finish([Return success])
 ```
 
@@ -21,5 +21,5 @@ flowchart TD
     Start([GetTable]) --> CheckName{Is tableName in _tables dictionary?}
     
     CheckName -- No --> ThrowErr[Raise TableNotFoundException]
-    CheckName -- Yes --> Retrieve[Return _tables[tableName]]
+    CheckName -- Yes --> Retrieve["Return _tables[tableName]"]
 ```

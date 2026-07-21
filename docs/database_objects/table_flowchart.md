@@ -10,7 +10,7 @@ flowchart TD
     GetName --> CheckName{Is columnName in _columns dict?}
     
     CheckName -- Yes --> ThrowErr[Raise DuplicateColumnException]
-    CheckName -- No --> Map[Store: _columns[columnName] = column]
+    CheckName -- No --> Map["Store: _columns[columnName] = column"]
     Map --> Finish([Return success])
 ```
 

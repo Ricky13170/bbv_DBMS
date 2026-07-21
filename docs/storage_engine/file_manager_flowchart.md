@@ -31,7 +31,7 @@ flowchart TD
     OSLseek --> CheckSeek{Seek Success?}
     CheckSeek -- No --> Error3[Raise IOError]
     CheckSeek -- Yes --> OSRead[Call os.read(fd, size)]
-    OSRead --> Return([Return byte[] data])
+    OSRead --> Return(["Return byte[] data"])
 ```
 
 ## 3. `write_block(file_handle, offset, data)` Flowchart
