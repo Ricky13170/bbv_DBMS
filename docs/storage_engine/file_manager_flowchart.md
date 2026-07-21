@@ -12,11 +12,11 @@ flowchart TD
     CheckOpen -- Yes --> ReturnCache[Return cached FileHandle]
     CheckOpen -- No --> CheckLimit{open_count < MAX_OPEN?}
     CheckLimit -- No --> Error2[Raise MaxOpenFilesExceededException]
-    CheckLimit -- Yes --> OSOpen[Call os.open(path)]
-    OSOpen --> CreateHandle[Instantiate FileHandle with fd]
-    CreateHandle --> AddCache[Store in active_handles dictionary]
-    AddCache --> Increment[Increment open_count]
-    Increment --> End([Return new FileHandle])
+    CheckLimit -- Yes --> OSOpen["Call os.open(path)"]
+    OSOpen --> CreateHandle["Instantiate FileHandle with fd"]
+    CreateHandle --> AddCache["Store in active_handles dictionary"]
+    AddCache --> Increment["Increment open_count"]
+    Increment --> End(["Return new FileHandle"])
 ```
 
 ## 2. `read_block(file_handle, offset, size)` Flowchart
@@ -27,10 +27,10 @@ flowchart TD
     CheckHandle -- No --> Error1[Raise InvalidHandleException]
     CheckHandle -- Yes --> CheckOffset{Is offset >= 0?}
     CheckOffset -- No --> Error2[Raise InvalidOffsetException]
-    CheckOffset -- Yes --> OSLseek[Call os.lseek(fd, offset)]
+    CheckOffset -- Yes --> OSLseek["Call os.lseek(fd, offset)"]
     OSLseek --> CheckSeek{Seek Success?}
     CheckSeek -- No --> Error3[Raise IOError]
-    CheckSeek -- Yes --> OSRead[Call os.read(fd, size)]
+    CheckSeek -- Yes --> OSRead["Call os.read(fd, size)"]
     OSRead --> Return(["Return byte[] data"])
 ```
 
@@ -42,11 +42,11 @@ flowchart TD
     CheckHandle -- No --> Error1[Raise InvalidHandleException]
     CheckHandle -- Yes --> CheckOffset{Is offset >= 0?}
     CheckOffset -- No --> Error2[Raise InvalidOffsetException]
-    CheckOffset -- Yes --> OSLseek[Call os.lseek(fd, offset)]
+    CheckOffset -- Yes --> OSLseek["Call os.lseek(fd, offset)"]
     OSLseek --> CheckSeek{Seek Success?}
     CheckSeek -- No --> Error3[Raise IOError]
-    CheckSeek -- Yes --> OSWrite[Call os.write(fd, data)]
-    OSWrite --> Return([Return bytes_written / True])
+    CheckSeek -- Yes --> OSWrite["Call os.write(fd, data)"]
+    OSWrite --> Return(["Return bytes_written / True"])
 ```
 
 ## 4. `close_file(file_handle)` Flowchart
@@ -55,8 +55,8 @@ flowchart TD
 flowchart TD
     Start([Start: close_file]) --> CheckHandle{Is file_handle valid<br>& in active list?}
     CheckHandle -- No --> Error1[Raise InvalidHandleException]
-    CheckHandle -- Yes --> OSClose[Call os.close(fd)]
-    OSClose --> RemoveCache[Remove from active_handles]
-    RemoveCache --> Decrement[Decrement open_count]
-    Decrement --> End([Return True])
+    CheckHandle -- Yes --> OSClose["Call os.close(fd)"]
+    OSClose --> RemoveCache["Remove from active_handles"]
+    RemoveCache --> Decrement["Decrement open_count"]
+    Decrement --> End(["Return True"])
 ```
