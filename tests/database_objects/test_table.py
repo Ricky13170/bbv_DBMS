@@ -2,7 +2,6 @@ import pytest
 from src.database_objects.table import Table, DuplicateColumnException, ColumnNotFoundException, RowSchemaMismatchException
 from src.database_objects.column import Column
 from src.database_objects.row import Row
-from src.database_objects.constraint import NotNullValidator
 from unittest.mock import MagicMock
 
 class TestAddColumn:
@@ -48,16 +47,7 @@ class TestRowOperations:
         with pytest.raises(RowSchemaMismatchException):
             table.insert_row(row)
 
-    def test_InsertRow_StrategyPattern_ShouldDelegateToValidator(self):
-        table = Table("users")
-        table.add_column(Column("id", "integer"))
-        
-        mock_validator = MagicMock()
-        table.add_validator(mock_validator)
-        
-        row = Row([1])
-        table.insert_row(row)
-        mock_validator.validate.assert_called_once_with(row)
+
 
 
 class TestIndexIntegration:

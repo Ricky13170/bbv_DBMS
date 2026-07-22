@@ -1,5 +1,5 @@
 import pytest
-from src.database_objects.schema import Schema, DuplicateObjectException, ObjectNotFoundException
+from src.database_objects.schema import Schema, DuplicateObjectException, ObjectNotFoundException, DependencyViolationException
 from src.database_objects.table import Table
 from src.database_objects.view import View
 from src.database_objects.sequence import Sequence
@@ -50,6 +50,13 @@ class TestSchemaTables:
         schema = Schema("StudentSchema", "admin")
         with pytest.raises(ObjectNotFoundException):
             schema.drop_table("unknown-tbl")
+
+    def test_DropTable_WhenTableHasForeignKeysPointingToIt_ShouldThrow(self):
+        schema = Schema("StudentSchema", "admin")
+        schema.add_table(Table("parent"))
+        schema.add_table(Table("child")) # In green phase, we would attach an FK from child to parent here
+        with pytest.raises(DependencyViolationException):
+            schema.drop_table("parent")
 
 class TestSchemaViews:
     def test_CreateView_ShouldStoreInSchema(self):

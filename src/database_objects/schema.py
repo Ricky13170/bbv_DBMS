@@ -3,18 +3,26 @@ from src.database_objects.table import Table
 from src.database_objects.view import View
 from src.database_objects.sequence import Sequence
 from src.database_objects.stored_procedure import StoredProcedure
+from src.database_objects.database_object import DatabaseObject
 
 class DuplicateObjectException(Exception): pass
 class ObjectNotFoundException(Exception): pass
+class DependencyViolationException(Exception): pass
 
-class Schema:
+class Schema(DatabaseObject):
     def __init__(self, name: str, owner: str = "admin"):
-        self.name = name
+        super().__init__(name)
         self.owner = owner
         self._tables: List[Table] = []
         self._views: List[View] = []
         self._sequences: List[Sequence] = []
         self._procedures: List[StoredProcedure] = []
+
+    def create(self) -> None:
+        raise NotImplementedError()
+
+    def drop(self) -> None:
+        raise NotImplementedError()
 
     def add_table(self, table: Table) -> None:
         raise NotImplementedError()

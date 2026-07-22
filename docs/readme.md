@@ -10,12 +10,19 @@ This document outlines the core Design Patterns derived from the Feature Mindmap
 | :--- | :--- | :--- | :--- |
 | **Catalog Management**<br>`CatalogManager` | **Singleton** | The database instance must have one centralized, globally accessible registry for all schemas to prevent synchronization conflicts. | Test accessing the instance from multiple parallel threads to ensure only one memory address is generated. |
 | **Table Creation**<br>`SchemaBuilder`, `TableBuilder` | **Nested Builder** | Initializing a hierarchy (Schema contains Tables, Tables contain Columns) is bulky. Nested Builders allow cascading fluent configurations. | Test the fluent method chaining (`.with_table().with_column().build()`) to verify it returns a valid composite tree without missing nodes. |
-| **Constraint Validation**<br>`IConstraintValidator` | **Strategy** | Extracts validation logic (NotNull, Unique) away from the `Table` class, preventing the `InsertRow` method from bloating with if/else chains. | Test using isolated Mock strategies or simulated bad data rows to catch specific `Exception` violations. |
+| **Constraint Validation**<br>`Constraint` (Base) | **Strategy** | Extracts validation logic (Check, Unique) away from the `Table` class, preventing the `insert_row` method from bloating with if/else chains. | Test using isolated mock strategies or simulated bad data rows to catch specific `ConstraintViolationException` violations. |
+| **Validation Context**<br>`ConstraintContext` | **Parameter Object** | Reduces method signature bloat (avoid passing `row`, `table`, `schema` individually). Packages all validation state into a single immutable context envelope. | Test that the context successfully binds references to the input Table and Row without mutating them. |
+| **Referential Integrity**<br>`ForeignKeyConstraint`,<br>`IReferentialAction` | **Strategy** | Hardcoding `CASCADE` vs `RESTRICT` logic inside the Table creates spaghetti code. Exposing them as interchangeable strategies allows dynamic FK behavior. | Create mock actions (`CascadeAction`, `RestrictAction`) and test if the parent deletion successfully triggers the correct child table cascade or exception. |
 | **Index Creation**<br>`IndexFactory` | **Factory Method** | The DBMS supports various Index types (Hash, B-Tree). The core system shouldn't hardcode their instantiation. | Call the Factory with a flag (`type="BTREE"`) and test if the inserted Node correctly routes through the B-Tree logic flow. |
 | **Column Definition**<br>`Column`, `ColumnBuilder` | **Value Object** | A Column is immutable after creation (name + type fixed). Enforces that structure cannot mutate during runtime. | Test that two Columns with same name/type are equal, and that mutating properties raises an error. |
 | **Row Data**<br>`Row` | **Value Object** | A Row represents a snapshot of data at insert time. Immutable values prevent dirty reads and concurrent modification bugs. | Test that Row is constructed with fixed-length values matching Column schema, and equality is value-based not reference-based. |
 | **Database Entry Point**<br>`Database` | **Facade** | `Database` wraps the `CatalogManager` + `SchemaBuilder` internals and exposes a clean API: `create_schema`, `drop_schema`, `get_schema`. The caller never touches the subsystems directly. | Test that calling `db.create_schema("public")` correctly persists the schema through `CatalogManager`. |
 | **Database Lifecycle**<br>`DatabaseCatalog` | **Factory Method** | Controls the creation and deletion of `Database` objects. Prevents duplicate names and acts as the single source of truth for all active databases, mirroring `IndexFactory`. | Test that `DatabaseCatalog.create_database("Tiki")` returns a `Database` instance, and that creating a duplicate name raises `DatabaseExistsException`. |
+| **Data Partitioning**<br>`PartitionStrategy` | **Strategy Pattern** | Routing rows across multiple partition ranges shouldn't clutter the main `Table`'s `insert_row` logic. Delegating the routing handles Overlaps, Boundaries, and Not-Found cleanly. | Test `route_row` on explicit mathematical boundaries. Test that overlapping ranges throw `PartitionRangeOverlapException`. |
+| **Schema Management**<br>`Schema`, `DatabaseObject` | **Composite Pattern** | Managing Tables, Views, and Sequences as explicit disparate types makes Schema code messy. Using a Component interface (`DatabaseObject`) allows treating all Leaf objects uniformly. | Test that `Table`, `View`, and `Sequence` can all be added generically to the Schema, and that calling `drop()` cascades correctly. |
+| **Virtual Tables**<br>`View` | **Proxy / Adapter Pattern** | A View acts as a virtual table, shielding users from complex joins. It proxies `SELECT` queries to underlying tables without physically storing data. | Test that `resolve(schema)` correctly throws `NotImplementedError` or translates the query using actual Schema objects safely. |
+| **Auto Increment ID**<br>`Sequence` | **State Pattern** | Sequences must maintain a thread-safe incrementing state across concurrent inserts across the DBMS system. | Test that traversing `next_value()` incrementally increments the state, and limits are respected. |
+| **Executable Logic**<br>`StoredProcedure` | **Command Pattern** | Allows defining and packaging custom procedural SQL/Logic into isolated, executable blocks. The system simply blind-triggers `execute()`. | Test that invoking `execute()` with parameters successfully delegates to the underlying runtime environment. |
 
 
 ### 1.1. Sequence Diagram: Builder Pattern
@@ -118,7 +125,45 @@ sequenceDiagram
     deactivate Factory
 ```
 
-### 1.5. Sequence Diagram: Factory Method & Facade (Database Lifecycle)
+### 1.5. Sequence Diagram: Table-Index Integration (insert_row flow)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Table
+    participant Val as IConstraintValidator (Strategy)
+    participant Factory as IndexFactory
+    participant Idx as Index (BTree/Hash)
+
+    Client->>Table: insert_row(row)
+    activate Table
+
+    Table->>Table: _validate_value_count(row)
+    alt Column count mismatch
+        Table-->>Client: throw RowSchemaMismatchException
+    end
+
+    loop Each validator in _validators
+        Table->>Val: validate(ConstraintContext)
+        alt Violation detected
+            Val-->>Table: throw ConstraintViolationException
+            Table-->>Client: propagate exception
+        else OK
+            Val-->>Table: true
+        end
+    end
+
+    Table->>Table: _rows.append(row)
+
+    loop Each index in _indexes
+        Table->>Idx: insert(key, record_pointer)
+        Idx-->>Table: void
+    end
+
+    Table-->>Client: void
+    deactivate Table
+```
+
+### 1.6. Sequence Diagram: Factory Method & Facade (Database Lifecycle)
 ```mermaid
 sequenceDiagram
     participant Client
