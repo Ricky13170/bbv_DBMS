@@ -1,24 +1,17 @@
-from .table import Table
-from .column import Column
-
-
-class InvalidTableDefinitionException(Exception):
-    pass
-
+from src.database_objects.table import Table
 
 class TableBuilder:
     def __init__(self, table_name: str):
-        self._table = Table(table_name)
+        self.table_name = table_name
+
+    def with_column(self, name: str, data_type: str) -> 'TableBuilder':
+        raise NotImplementedError()
 
     def with_int_column(self, name: str) -> 'TableBuilder':
-        self._table.add_column(Column(name, "integer"))
-        return self
+        raise NotImplementedError()
 
-    def with_string_column(self, name: str, length: int) -> 'TableBuilder':
-        self._table.add_column(Column(name, f"string({length})"))
-        return self
+    def with_string_column(self, name: str) -> 'TableBuilder':
+        raise NotImplementedError()
 
     def build(self) -> Table:
-        if len(self._table._columns) == 0:
-            raise InvalidTableDefinitionException("Table must have at least one column.")
-        return self._table
+        raise NotImplementedError()

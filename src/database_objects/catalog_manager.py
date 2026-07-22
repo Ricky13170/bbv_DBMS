@@ -1,5 +1,4 @@
-from .schema import Schema
-from typing import Dict
+from src.database_objects.schema import Schema
 
 class CatalogManager:
     _instance = None
@@ -10,15 +9,11 @@ class CatalogManager:
             cls._instance._schemas = {}
         return cls._instance
 
-    def __init__(self):
-        pass
-
     def get_schema(self, name: str) -> Schema:
-        if name not in self._schemas:
-            raise KeyError(f"Schema '{name}' not found.")
-        return self._schemas[name]
+        raise NotImplementedError()
 
     def add_schema(self, schema: Schema) -> None:
-        if schema.name in self._schemas:
-            raise ValueError(f"Schema '{schema.name}' already exists.")
-        self._schemas[schema.name] = schema
+        raise NotImplementedError()
+
+    def remove_schema(self, name: str) -> None:
+        raise NotImplementedError()

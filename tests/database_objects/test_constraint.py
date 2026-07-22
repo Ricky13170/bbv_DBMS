@@ -10,14 +10,14 @@ from src.database_objects.row import Row
 class TestNotNullValidator:
     def test_Validate_WhenValueIsNotNull_ShouldReturnTrue(self):
         validator = NotNullValidator(column_index=1)
-        row = Row([1, "Bob", 25])  # Index 1 is "Bob"
+        row = Row([1, "Bob", 25]) 
         
         result = validator.validate(row)
         assert result is True
 
     def test_Validate_WhenValueIsNull_ShouldThrow(self):
         validator = NotNullValidator(column_index=1)
-        row = Row([2, None, 30])  # Index 1 is None
+        row = Row([2, None, 30]) 
         
         with pytest.raises(ConstraintViolationException):
             validator.validate(row)
@@ -37,7 +37,7 @@ class TestUniqueValidator:
         row1 = Row([100, "Alice"])
         row2 = Row([100, "DuplicateID"])
         
-        validator.validate(row1)  # First insert OK
+        validator.validate(row1)
         
         with pytest.raises(ConstraintViolationException):
-            validator.validate(row2)  # Second insert should fail
+            validator.validate(row2)  

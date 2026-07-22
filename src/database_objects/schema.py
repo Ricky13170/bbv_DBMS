@@ -1,33 +1,62 @@
-from .table import Table
+from typing import List, Optional
+from src.database_objects.table import Table
+from src.database_objects.view import View
+from src.database_objects.sequence import Sequence
+from src.database_objects.stored_procedure import StoredProcedure
 
-
-class DuplicateTableNameException(Exception):
-    pass
-
-
-class TableNotFoundException(Exception):
-    pass
-
+class DuplicateObjectException(Exception): pass
+class ObjectNotFoundException(Exception): pass
 
 class Schema:
-    def __init__(self, name: str):
+    def __init__(self, name: str, owner: str = "admin"):
         self.name = name
-        self._tables = {}
+        self.owner = owner
+        self._tables: List[Table] = []
+        self._views: List[View] = []
+        self._sequences: List[Sequence] = []
+        self._procedures: List[StoredProcedure] = []
 
     def add_table(self, table: Table) -> None:
-        if table.name in self._tables:
-            raise DuplicateTableNameException(f"Table '{table.name}' already exists.")
-        self._tables[table.name] = table
+        raise NotImplementedError()
 
     def get_table(self, table_name: str) -> Table:
-        if table_name not in self._tables:
-            raise TableNotFoundException(f"Table '{table_name}' does not exist.")
-        return self._tables[table_name]
+        raise NotImplementedError()
 
-    def remove_table(self, table_name: str) -> None:
-        if table_name not in self._tables:
-            raise TableNotFoundException(f"Table '{table_name}' does not exist.")
-        del self._tables[table_name]
+    def drop_table(self, table_name: str) -> None:
+        raise NotImplementedError()
 
-    def contains_table(self, table_name: str) -> bool:
-        return table_name in self._tables
+    def rename_table(self, old_name: str, new_name: str) -> None:
+        raise NotImplementedError()
+
+    def list_all_tables(self) -> List[Table]:
+        raise NotImplementedError()
+
+
+    def add_view(self, view: View) -> None:
+        raise NotImplementedError()
+
+    def get_view(self, view_name: str) -> View:
+        raise NotImplementedError()
+
+    def drop_view(self, view_name: str) -> None:
+        raise NotImplementedError()
+
+
+    def add_sequence(self, sequence: Sequence) -> None:
+        raise NotImplementedError()
+
+    def get_sequence(self, sequence_name: str) -> Sequence:
+        raise NotImplementedError()
+
+    def drop_sequence(self, sequence_name: str) -> None:
+        raise NotImplementedError()
+
+
+    def add_procedure(self, procedure: StoredProcedure) -> None:
+        raise NotImplementedError()
+
+    def get_procedure(self, procedure_name: str) -> StoredProcedure:
+        raise NotImplementedError()
+
+    def drop_procedure(self, procedure_name: str) -> None:
+        raise NotImplementedError()

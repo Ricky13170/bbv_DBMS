@@ -1,4 +1,4 @@
-# Advanced Architecture: Design Patterns & Unit Testing Roadmap
+# Design Patterns & Unit Testing Roadmap
 
 This document outlines the core Design Patterns derived from the Feature Mindmap, Class Mindmap, and Test Cases. It defines the rationale for applying these patterns and how they integrate into the Test-Driven Development (TDD) lifecycle.
 
@@ -12,6 +12,11 @@ This document outlines the core Design Patterns derived from the Feature Mindmap
 | **Table Creation**<br>`SchemaBuilder`, `TableBuilder` | **Nested Builder** | Initializing a hierarchy (Schema contains Tables, Tables contain Columns) is bulky. Nested Builders allow cascading fluent configurations. | Test the fluent method chaining (`.with_table().with_column().build()`) to verify it returns a valid composite tree without missing nodes. |
 | **Constraint Validation**<br>`IConstraintValidator` | **Strategy** | Extracts validation logic (NotNull, Unique) away from the `Table` class, preventing the `InsertRow` method from bloating with if/else chains. | Test using isolated Mock strategies or simulated bad data rows to catch specific `Exception` violations. |
 | **Index Creation**<br>`IndexFactory` | **Factory Method** | The DBMS supports various Index types (Hash, B-Tree). The core system shouldn't hardcode their instantiation. | Call the Factory with a flag (`type="BTREE"`) and test if the inserted Node correctly routes through the B-Tree logic flow. |
+| **Column Definition**<br>`Column`, `ColumnBuilder` | **Value Object** | A Column is immutable after creation (name + type fixed). Enforces that structure cannot mutate during runtime. | Test that two Columns with same name/type are equal, and that mutating properties raises an error. |
+| **Row Data**<br>`Row` | **Value Object** | A Row represents a snapshot of data at insert time. Immutable values prevent dirty reads and concurrent modification bugs. | Test that Row is constructed with fixed-length values matching Column schema, and equality is value-based not reference-based. |
+| **Database Entry Point**<br>`Database` | **Facade** | `Database` wraps the `CatalogManager` + `SchemaBuilder` internals and exposes a clean API: `create_schema`, `drop_schema`, `get_schema`. The caller never touches the subsystems directly. | Test that calling `db.create_schema("public")` correctly persists the schema through `CatalogManager`. |
+| **Database Lifecycle**<br>`DatabaseCatalog` | **Factory Method** | Controls the creation and deletion of `Database` objects. Prevents duplicate names and acts as the single source of truth for all active databases, mirroring `IndexFactory`. | Test that `DatabaseCatalog.create_database("Tiki")` returns a `Database` instance, and that creating a duplicate name raises `DatabaseExistsException`. |
+
 
 ### 1.1. Sequence Diagram: Builder Pattern
 ```mermaid
@@ -111,6 +116,61 @@ sequenceDiagram
     end
     Factory-->>Client: return Index object
     deactivate Factory
+```
+
+### 1.5. Sequence Diagram: Factory Method & Facade (Database Lifecycle)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant DC as DatabaseCatalog (Factory)
+    participant DB as Database (Facade)
+    participant CM as CatalogManager (Singleton)
+
+    %% Phase 1: Factory Creates Database
+    Client->>DC: create_database("ecommerce")
+    activate DC
+    DC->>DC: Check name collision
+    DC->>DB: new Database("ecommerce")
+    DB-->>DC: Database instance
+    DC-->>Client: return Database object
+    deactivate DC
+
+    %% Phase 2: Facade Delegates Schema Creation
+    Client->>DB: create_schema("public")
+    activate DB
+    DB->>CM: add_schema(schema object)
+    CM-->>DB: success
+    DB-->>Client: void
+    deactivate DB
+```
+
+### 1.6. Sequence Diagram: Value Object (Row / Column Immutability)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant VO as Row / Column (Value Object)
+    participant RAM as Internal State (Tuple)
+
+    %% Flow 1: Creation and Type Enforcement 
+    Client->>VO: new Row([1, "Alice"])
+    activate VO
+    VO->>RAM: Encapsulate as read-only Tuple
+    VO-->>Client: instance
+    deactivate VO
+    
+    %% Flow 2: Attempting Dirty Write Mutation
+    Client-xVO: row._values[0] = 5
+    activate VO
+    VO-->>Client: Throw TypeError / AttributeError
+    deactivate VO
+    
+    %% Flow 3: Value Equality Comparison
+    Client->>VO: __eq__(other_row)
+    activate VO
+    VO->>RAM: Self.Tuple == Other.Tuple
+    RAM-->>VO: compare data purely
+    VO-->>Client: return boolean
+    deactivate VO
 ```
 
 ---

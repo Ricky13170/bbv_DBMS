@@ -3,20 +3,21 @@ from src.database_objects.catalog_manager import CatalogManager
 from src.database_objects.schema import Schema
 
 class TestCatalogManager:
-    def test_Singleton_WhenCalledMultipleTimes_ShouldReturnSameInstance(self):
-        instance1 = CatalogManager()
-        instance2 = CatalogManager()
-        
-        # Verify both point to identical memory address
-        assert instance1 is instance2
+    def setup_method(self):
+        # Reset the singleton before tests
+        CatalogManager._instance = None
 
-    def test_AddAndGetSchema_ShouldWorkAcrossInstances(self):
-        manager1 = CatalogManager()
-        schema = Schema("public")
-        manager1.add_schema(schema)
+    def test_Singleton_ShouldReturnSameAddress(self):
+        c1 = CatalogManager()
+        c2 = CatalogManager()
+        assert c1 is c2
+
+    def test_AddSchema_ShouldPersistGlobally(self):
+        c1 = CatalogManager()
+        c1.add_schema(Schema("global_schema"))
         
-        # Fetching through a "new" call should still return the same shared data
-        manager2 = CatalogManager()
-        fetched_schema = manager2.get_schema("public")
+        c2 = CatalogManager()
+        retrieved = c2.get_schema("global_schema")
         
-        assert fetched_schema is schema
+        assert retrieved is not None
+        assert retrieved.name == "global_schema"

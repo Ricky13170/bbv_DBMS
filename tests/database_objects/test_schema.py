@@ -1,57 +1,96 @@
 import pytest
-from src.database_objects.schema import (
-    Schema,
-    DuplicateTableNameException,
-    TableNotFoundException
-)
+from src.database_objects.schema import Schema, DuplicateObjectException, ObjectNotFoundException
 from src.database_objects.table import Table
+from src.database_objects.view import View
+from src.database_objects.sequence import Sequence
+from src.database_objects.stored_procedure import StoredProcedure
 
-
-class TestAddTable:
-    def test_AddTable_WhenTableIsValid_ShouldRegisterTable(self):
-        schema = Schema("public")
+class TestSchemaTables:
+    def test_CreateTable_ShouldStoreInSchema(self):
+        schema = Schema("StudentSchema", "admin")
         table = Table("users")
-        
         schema.add_table(table)
-        
-        assert schema.contains_table("users") is True
-        assert schema.get_table("users") == table
+        retrieved = schema.get_table("users")
+        assert retrieved is not None
+        assert retrieved.name == "users"
 
-    def test_AddTable_WhenNameAlreadyExists_ShouldThrow(self):
-        schema = Schema("public")
-        table1 = Table("users")
-        table2 = Table("users")
-        
-        schema.add_table(table1)
-        
-        with pytest.raises(DuplicateTableNameException):
-            schema.add_table(table2)
-
-
-class TestGetTable:
-    def test_GetTable_WhenTableNotFound_ShouldThrow(self):
-        schema = Schema("public")
-        
-        with pytest.raises(TableNotFoundException):
-            schema.get_table("non_existent_table")
-
-
-class TestRemoveTable:
-    def test_RemoveTable_WhenTableExists_ShouldRemoveTable(self):
-        schema = Schema("public")
+    def test_DropTable_ShouldRemoveFromSchema(self):
+        schema = Schema("StudentSchema", "admin")
         table = Table("users")
-        
-        # Override to bypass NotImplementedError for setup (or use mock)
-        # But wait, in purely strict TDD we want the actual method to fail 
-        # so this test will fail at add_table before it even reaches remove_table.
-        # That's perfectly fine for Red Phase.
         schema.add_table(table)
-        schema.remove_table("users")
-        
-        assert schema.contains_table("users") is False
+        schema.drop_table("users")
+        with pytest.raises(ObjectNotFoundException):
+            schema.get_table("users")
 
-    def test_RemoveTable_WhenTableNotFound_ShouldThrow(self):
-        schema = Schema("public")
-        
-        with pytest.raises(TableNotFoundException):
-            schema.remove_table("non_existent_table")
+    def test_RenameTable_ShouldUpdateInternalReferences(self):
+        schema = Schema("StudentSchema", "admin")
+        table = Table("users")
+        schema.add_table(table)
+        schema.rename_table("users", "customers")
+        retrieved = schema.get_table("customers")
+        assert retrieved is not None
+        assert retrieved.name == "customers"
+        with pytest.raises(ObjectNotFoundException):
+            schema.get_table("users")
+
+    def test_ListAllTables_ShouldReturnAllInsertedTables(self):
+        schema = Schema("StudentSchema", "admin")
+        schema.add_table(Table("users"))
+        schema.add_table(Table("orders"))
+        tables = schema.list_all_tables()
+        assert len(tables) == 2
+
+    def test_RejectDuplicateTableName_ShouldThrow(self):
+        schema = Schema("StudentSchema", "admin")
+        schema.add_table(Table("users"))
+        with pytest.raises(DuplicateObjectException):
+            schema.add_table(Table("users"))
+
+    def test_RejectUnknownTable_ForDrop_ShouldThrow(self):
+        schema = Schema("StudentSchema", "admin")
+        with pytest.raises(ObjectNotFoundException):
+            schema.drop_table("unknown-tbl")
+
+class TestSchemaViews:
+    def test_CreateView_ShouldStoreInSchema(self):
+        schema = Schema("StudentSchema", "admin")
+        view = View("view-001", "SELECT * FROM users")
+        schema.add_view(view)
+        assert schema.get_view("view-001") is not None
+
+    def test_DropView_ShouldRemoveFromSchema(self):
+        schema = Schema("StudentSchema")
+        view = View("view-001", "SELECT * FROM users")
+        schema.add_view(view)
+        schema.drop_view("view-001")
+        with pytest.raises(ObjectNotFoundException):
+            schema.get_view("view-001")
+
+class TestSchemaProcedures:
+    def test_CreateProcedure_ShouldStoreInSchema(self):
+        schema = Schema("StudentSchema")
+        proc = StoredProcedure("proc-001", "END;")
+        schema.add_procedure(proc)
+        assert schema.get_procedure("proc-001") is not None
+
+    def test_DropProcedure_ShouldRemoveFromSchema(self):
+        schema = Schema("StudentSchema")
+        proc = StoredProcedure("proc-001", "END;")
+        schema.add_procedure(proc)
+        schema.drop_procedure("proc-001")
+        with pytest.raises(ObjectNotFoundException):
+            schema.get_procedure("proc-001")
+
+class TestSchemaSequences:
+    def test_CreateSequence_ShouldStoreInSchema(self):
+        schema = Schema("StudentSchema")
+        seq = Sequence("seq-001")
+        schema.add_sequence(seq)
+        assert schema.get_sequence("seq-001") is not None
+
+    def test_DropSequence_ShouldRemoveFromSchema(self):
+        schema = Schema("StudentSchema")
+        schema.add_sequence(Sequence("seq-001"))
+        schema.drop_sequence("seq-001")
+        with pytest.raises(ObjectNotFoundException):
+            schema.get_sequence("seq-001")

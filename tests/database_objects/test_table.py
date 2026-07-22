@@ -1,20 +1,15 @@
 import pytest
-from src.database_objects.table import (
-    Table,
-    DuplicateColumnException,
-    ColumnMismatchException
-)
+from src.database_objects.table import Table, DuplicateColumnException, ColumnNotFoundException, RowSchemaMismatchException
 from src.database_objects.column import Column
 from src.database_objects.row import Row
-
+from src.database_objects.constraint import NotNullValidator
+from unittest.mock import MagicMock
 
 class TestAddColumn:
     def test_AddColumn_WhenColumnIsValid_ShouldAddColumn(self):
         table = Table("users")
         col = Column("id", "integer")
-        
         table.add_column(col)
-        
         assert table.contains_column("id") is True
         assert table.get_column("id") == col
 
@@ -22,68 +17,60 @@ class TestAddColumn:
         table = Table("users")
         col1 = Column("id", "integer")
         col2 = Column("id", "string")
-        
         table.add_column(col1)
-        
         with pytest.raises(DuplicateColumnException):
             table.add_column(col2)
 
 
-class TestInsertRow:
-    def test_InsertRow_WhenRowMatchesColumnCount_ShouldAddRow(self, mocker):
+class TestDropColumn:
+    def test_DropColumn_WhenColumnExists_ShouldRemoveColumn(self):
+        table = Table("test_table")
+        col = Column("id", "int")
+        table.add_column(col)
+        table.drop_column("id")
+        assert table.contains_column("id") is False
+
+
+class TestRowOperations:
+    def test_InsertRow_WhenRowIsValid_ShouldInsertRow(self):
         table = Table("users")
-        col1 = Column("id", "integer")
-        col2 = Column("name", "string")
-        
-        # Override add_column so we can feed in metadata for this specific test
-        # without it failing from NotImplementedError (which is inside add_column)
-        def mock_add_column(col):
-            table._columns[col.name] = col
-        
-        mocker.patch.object(table, 'add_column', side_effect=mock_add_column)
-        table.add_column(col1)
-        table.add_column(col2)
-        
-        row = Row([1, "Alice"])
+        table.add_column(Column("id", "integer"))
+        row = Row([1])
         table.insert_row(row)
-        
+        assert table.contains_row(row) is True
         assert len(table._rows) == 1
 
-    def test_InsertRow_WhenValueCountDoesNotMatch_ShouldThrow(self, mocker):
+    def test_InsertRow_WhenValueCountDoesNotMatch_ShouldThrow(self):
         table = Table("users")
-        col = Column("id", "integer")
-        
-        def mock_add_column(col):
-            table._columns[col.name] = col
-        mocker.patch.object(table, 'add_column', side_effect=mock_add_column)
-        table.add_column(col)
-        
-        # Row has 2 values, but table only expects 1 from the registered columns
-        row = Row([1, "Alice"])
-        
-        with pytest.raises(ColumnMismatchException):
+        table.add_column(Column("id", "integer"))
+        table.add_column(Column("name", "string"))
+        row = Row([1])
+        with pytest.raises(RowSchemaMismatchException):
             table.insert_row(row)
 
-
-class TestInsertRowWithConstraints:
-    def test_InsertRow_WhenValidatorFails_ShouldThrow(self, mocker):
-        from src.database_objects.constraint import NotNullValidator, ConstraintViolationException
+    def test_InsertRow_StrategyPattern_ShouldDelegateToValidator(self):
         table = Table("users")
-        col = Column("id", "integer")
+        table.add_column(Column("id", "integer"))
         
-        def mock_add_column(col):
-            table._columns[col.name] = col
-        mocker.patch.object(table, 'add_column', side_effect=mock_add_column)
-        table.add_column(col)
+        mock_validator = MagicMock()
+        table.add_validator(mock_validator)
         
-        # Inject the constraint strategy
-        validator = NotNullValidator(0)
-        table.add_validator(validator)
-        
-        row = Row([None]) # Null violates the constraint
-        
-        # Because Table.insert_row currently lacks the logic to loop through validators,
-        # it will incorrectly accept the Null row and fail to raise the exception,
-        # fulfilling the Red Phase of Pytest!
-        with pytest.raises(ConstraintViolationException):
-            table.insert_row(row)
+        row = Row([1])
+        table.insert_row(row)
+        mock_validator.validate.assert_called_once_with(row)
+
+
+class TestIndexIntegration:
+    def test_AddIndex_ShouldStoreInTable(self):
+        table = Table("users")
+        mock_index = MagicMock()
+        table.add_index(mock_index)
+        assert mock_index in table._indexes
+
+    def test_GetPrimaryIndex_ShouldReturnCorrectIndex(self):
+        table = Table("users")
+        mock_index = MagicMock()
+        mock_index.is_primary = True
+        table.add_index(mock_index)
+        primary = table.get_primary_index()
+        assert primary == mock_index

@@ -1,52 +1,57 @@
-from typing import List, Dict
-from .column import Column
-from .row import Row
-from .constraint import IConstraintValidator, ConstraintViolationException
+from typing import List, Optional
+from src.database_objects.column import Column
+from src.database_objects.row import Row
+from src.database_objects.constraint import IConstraintValidator
+from src.database_objects.index_factory import Index
 
-
-class DuplicateColumnException(Exception):
-    pass
-
-
-class ColumnMismatchException(Exception):
-    pass
-
-
-class InvalidDataTypeException(Exception):
-    pass
-
+class DuplicateColumnException(Exception): pass
+class ColumnNotFoundException(Exception): pass
+class RowSchemaMismatchException(Exception): pass
+class ColumnReferencedException(Exception): pass
 
 class Table:
     def __init__(self, name: str):
         self.name = name
-        self._columns: Dict[str, Column] = {}
+        self._columns: List[Column] = []
         self._rows: List[Row] = []
         self._validators: List[IConstraintValidator] = []
-
-    def add_validator(self, validator: IConstraintValidator) -> None:
-        self._validators.append(validator)
+        self._indexes: List[Index] = []
 
     def add_column(self, column: Column) -> None:
-        if column.name in self._columns:
-            raise DuplicateColumnException(f"Column '{column.name}' already exists.")
-        self._columns[column.name] = column
+        raise NotImplementedError()
+
+    def drop_column(self, column_name: str) -> None:
+        raise NotImplementedError()
+
+    def alter_column(self, column_name: str, new_column: Column) -> None:
+        raise NotImplementedError()
 
     def get_column(self, column_name: str) -> Column:
-        if column_name not in self._columns:
-            raise KeyError(f"Column '{column_name}' not found.")
-        return self._columns[column_name]
+        raise NotImplementedError()
 
     def contains_column(self, column_name: str) -> bool:
-        return column_name in self._columns
+        raise NotImplementedError()
 
     def insert_row(self, row: Row) -> None:
-        if len(row.values) != len(self._columns):
-            raise ColumnMismatchException(
-                f"Row length {len(row.values)} does not match table columns {len(self._columns)}."
-            )
+        raise NotImplementedError()
 
-        for validator in self._validators:
-            validator.validate(row)
+    def update_row(self, old_row: Row, new_row: Row) -> None:
+        raise NotImplementedError()
 
-        self._rows.append(row)
+    def delete_row(self, row: Row) -> bool:
+        raise NotImplementedError()
 
+    def contains_row(self, row: Row) -> bool:
+        raise NotImplementedError()
+
+    def add_validator(self, validator: IConstraintValidator) -> None:
+        raise NotImplementedError()
+
+    def add_index(self, index: Index) -> None:
+        raise NotImplementedError()
+
+    def get_primary_index(self) -> Optional[Index]:
+        raise NotImplementedError()
+
+    def accept(self, visitor) -> None:
+        raise NotImplementedError()
