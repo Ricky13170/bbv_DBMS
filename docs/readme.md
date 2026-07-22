@@ -218,6 +218,292 @@ sequenceDiagram
     deactivate VO
 ```
 
+### 1.7. Sequence Diagram: Composite Pattern (Schema DDL Cascade)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Sch as Schema (Composite)
+    participant Tbl as Table (DatabaseObject)
+    participant Vw as View (DatabaseObject)
+    
+    %% Recursive Drop Operation
+    Client->>Sch: drop()
+    activate Sch
+    Sch->>Sch: Validate ownership/permissions (Future)
+    
+    loop For each object in _tables, _views, _sequences, _procedures
+        Sch->>Tbl: drop()
+        activate Tbl
+        Tbl->>Tbl: Check cross-table Foreign Keys
+        alt FK Dependency Exists (Aggregate Root rule)
+            Tbl-->>Sch: throw DependencyViolationException
+            Sch-->>Client: bubble up Exception (Rollback)
+        else Safe to Drop
+            Tbl->>Tbl: execute internal wipe
+            Tbl-->>Sch: void
+        end
+        deactivate Tbl
+        
+        Sch->>Vw: drop()
+        Vw-->>Sch: void
+    end
+    
+    Sch-->>Client: success
+    deactivate Sch
+```
+
+### 1.8. Sequence Diagram: PartitionStrategy (Strategy Pattern)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant T as Table
+    participant PS as PartitionStrategy
+    
+    Client->>T: insert_row(row)
+    activate T
+    T->>PS: route_row(row.key)
+    activate PS
+    
+    alt Key falls within Range A
+        PS-->>T: return "Partition_A"
+    else Key falls within Range B
+        PS-->>T: return "Partition_B"
+    else Key out of bounds
+        PS-->>T: throw PartitionNotFoundException
+    end
+    deactivate PS
+    
+    alt Partition Found
+        T->>T: Insert into corresponding Partition Object
+    else Exception
+        T-->>Client: abort insert
+    end
+    
+    T-->>Client: success
+    deactivate T
+```
+
+### 1.9. Sequence Diagram: View (Proxy) & StoredProcedure (Command)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant V as View (Proxy)
+    participant SP as StoredProcedure (Command)
+    participant Engine as Query Engine (Subsystem)
+    
+    %% Proxy Pattern Flow shielding underlying Tables
+    Client->>V: SELECT * FROM active_users_view
+    activate V
+    V->>V: resolve(schema)
+    V->>Engine: compile("SELECT * FROM users WHERE active=1")
+    Engine-->>V: Raw Result Set
+    V-->>Client: Proxy Result Set (Virtual Table)
+    deactivate V
+    
+    %% Command Pattern Flow for pre-packaged logic
+    Client->>SP: execute(employee_id=45)
+    activate SP
+    SP->>Engine: Eval("DELETE FROM logs WHERE id=45")
+    Engine-->>SP: success
+    SP-->>Client: success
+    deactivate SP
+```
+
+### 1.10. High-Level Class Diagram (Structural View)
+```mermaid
+classDiagram
+    %% Core Singleton & Factories
+    class CatalogManager {
+        <<Singleton>>
+        -schemas: dict
+        +add_schema()
+    }
+    class DatabaseCatalog {
+        <<Factory Method>>
+        -databases: dict
+        +create_database(name) Database
+    }
+    class Database {
+        <<Facade>>
+        +create_schema(name)
+    }
+    
+    DatabaseCatalog --> Database: creates
+    Database --> CatalogManager: delegates to
+
+    %% Composite Pattern (Database Objects)
+    class DatabaseObject {
+        <<Abstract>>
+        +name: str
+        +create()
+        +drop()
+    }
+    class Schema {
+        <<Composite>>
+        -_tables: List[Table]
+        -_views: List[View]
+        +add_table(t: Table)
+    }
+    class Table {
+        <<Leaf>>
+        +insert_row()
+    }
+    class View {
+        <<Proxy>>
+        +resolve()
+    }
+    class Sequence {
+        <<State>>
+        +next_value()
+    }
+    class StoredProcedure {
+        <<Command>>
+        +execute()
+    }
+
+    DatabaseObject <|-- Schema
+    DatabaseObject <|-- Table
+    DatabaseObject <|-- View
+    DatabaseObject <|-- Sequence
+    DatabaseObject <|-- StoredProcedure
+    
+    %% Semantic relationship: Schema encapsulates Leaf objects
+    Schema o-- DatabaseObject : containing
+
+    %% Table Internal Strategies & Value Objects
+    class PartitionStrategy {
+        <<Strategy>>
+        +route_row(key)
+    }
+    class Constraint {
+        <<Strategy Base>>
+        +validate(ctx: ConstraintContext)
+    }
+    class Column {
+        <<Value Object>>
+        +validate_value()
+    }
+    class Row {
+        <<Value Object>>
+        +values: Tuple
+    }
+    class Index {
+        <<Physical Mapping>>
+        +insert()
+    }
+    
+    Table *-- Column
+    Table *-- Row
+    Table *-- Constraint
+    Table *-- Index
+    Table --> PartitionStrategy : delegates routing
+```
+
+### 1.11. Detailed Class Diagram (API & Methods mapped from TDD)
+```mermaid
+classDiagram
+    %% Core Singleton & Factories
+    class DatabaseCatalog {
+        +create_database(name: str) Database
+        +get_database(name: str) Database
+        +drop_database(name: str)
+    }
+    class CatalogManager {
+        +add_schema(schema: Schema)
+        +get_schema(name: str) Schema
+    }
+    class Database {
+        +create_schema(name: str)
+        +drop_schema(name: str)
+        +get_schema(name: str) Schema
+    }
+    
+    %% Composite Pattern (Database Objects)
+    class DatabaseObject {
+        <<Abstract>>
+        +name: str
+        +create()
+        +drop()
+    }
+    class Schema {
+        +owner: str
+        +add_table(t: Table)
+        +get_table(name: str) Table
+        +drop_table(name: str)
+        +add_view(v: View)
+        +add_sequence(s: Sequence)
+        +add_procedure(p: StoredProcedure)
+    }
+    class Table {
+        +add_column(c: Column)
+        +drop_column(name: str)
+        +alter_column(name, c: Column)
+        +add_constraint(c: Constraint)
+        +drop_constraint(name: str)
+        +add_index(idx: Index)
+        +insert_row(row: Row)
+        +update_row(old_row: Row, new_row: Row)
+        +delete_row(row: Row)
+    }
+    class View {
+        +query_definition: str
+        +resolve(schema: Schema) str
+    }
+    class Sequence {
+        +start: int
+        +increment: int
+        +next_value() int
+    }
+    class StoredProcedure {
+        +body: str
+        +execute(*args, **kwargs)
+    }
+
+    DatabaseObject <|-- Schema
+    DatabaseObject <|-- Table
+    DatabaseObject <|-- View
+    DatabaseObject <|-- Sequence
+    DatabaseObject <|-- StoredProcedure
+    
+    %% Semantic relationship: Schema encapsulates Leaf objects
+    Schema o-- DatabaseObject : containing
+
+    %% Table Internal Strategies & Value Objects
+    class PartitionStrategy {
+        +add_range(name, start, end)
+        +remove_range(name: str)
+        +route_row(key: Any) str
+    }
+    class Constraint {
+        <<Abstract Strategy>>
+        +validate(ctx: ConstraintContext)
+    }
+    class Column {
+        +name: str
+        +data_type: str
+        +is_nullable: bool
+        +is_primary: bool
+        +validate_value(value: Any) bool
+    }
+    class Row {
+        +values: Tuple
+    }
+    class Index {
+        +is_unique: bool
+        +allows_null: bool
+        +insert(key: Any, ptr: Any)
+        +search(key: Any) List
+        +delete(key: Any, ptr: Any)
+        +range_search(start, end) List
+    }
+    
+    Table *-- Column
+    Table *-- Row
+    Table *-- Constraint
+    Table *-- Index
+    Table --> PartitionStrategy : delegates routing
+```
+
 ---
 
 ## TABLE 2: STORAGE & TRANSACTION ENGINE (Physical Hardware Layer)
