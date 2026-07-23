@@ -281,8 +281,37 @@ sequenceDiagram
     deactivate Factory
 ```
 
+### 1.11. Sequence Diagram: Strategy Pattern (PartitionStrategy)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Table
+    participant PStrat as PartitionStrategy
+    participant PartA as Table (Partition Q1)
+    
+    %% Setup (Admin cấu hình trước)
+    Client->>PStrat: add_range("Q1", "2023-01", "2023-03")
+    
+    %% Insertion (Lúc đẩy data thật vào)
+    Client->>Table: insert_row(row)
+    activate Table
+    Table->>PStrat: route_row(row.date)
+    activate PStrat
+    
+    alt Thuộc dải Q1
+        PStrat-->>Table: return "Q1"
+        Table->>PartA: insert_row(row)
+    else Thuộc dải dở dang / Không tìm thấy
+        PStrat-->>Table: throw PartitionNotFoundException
+        Table-->>Client: Nhè thẳng Exception ra bắt Client nhập lại
+    end
+    deactivate PStrat
+    
+    Table-->>Client: void
+    deactivate Table
+```
 
-### 1.10. High-Level Class Diagram (Structural View)
+### 1.12. High-Level Class Diagram (Structural View)
 ```mermaid
 classDiagram
     %% Core Singleton & Factories
