@@ -14,3 +14,12 @@ class TestSchemaBuilder:
         assert schema.name == "analytics"
         assert schema.get_table("users") is not None
         assert schema.get_table("sales") is not None
+
+    def test_WithTable_EmptyName_ShouldRaiseValueError(self):
+        builder = SchemaBuilder("analytics")
+        with pytest.raises(ValueError):
+            builder.with_table("")
+
+    def test_Build_EmptySchemaName_ShouldRaiseValueError(self):
+        with pytest.raises(ValueError):
+            SchemaBuilder("")

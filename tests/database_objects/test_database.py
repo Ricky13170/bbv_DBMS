@@ -19,3 +19,14 @@ class TestDatabaseFacade:
         
         with pytest.raises(Exception):
             db.get_schema("public")
+
+    def test_CreateSchema_WithDuplicateName_ShouldRaiseException(self):
+        db = Database("MainDB")
+        db.create_schema("public")
+        with pytest.raises(Exception):
+            db.create_schema("public")
+
+    def test_GetSchema_WhenNotExists_ShouldRaiseException(self):
+        db = Database("MainDB")
+        with pytest.raises(Exception):
+            db.get_schema("ghost_schema")

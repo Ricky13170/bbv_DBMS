@@ -4,7 +4,6 @@ from src.database_objects.schema import Schema
 
 class TestCatalogManager:
     def setup_method(self):
-        # Reset the singleton before tests
         CatalogManager._instance = None
 
     def test_Singleton_ShouldReturnSameAddress(self):
@@ -21,3 +20,14 @@ class TestCatalogManager:
         
         assert retrieved is not None
         assert retrieved.name == "global_schema"
+
+    def test_AddSchema_WithDuplicateName_ShouldRaiseException(self):
+        cm = CatalogManager()
+        cm.add_schema(Schema("dup_schema"))
+        with pytest.raises(Exception):
+            cm.add_schema(Schema("dup_schema"))
+
+    def test_GetSchema_WhenNotExists_ShouldRaiseException(self):
+        cm = CatalogManager()
+        with pytest.raises(Exception):
+            cm.get_schema("ghost_schema")

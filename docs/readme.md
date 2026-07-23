@@ -6,190 +6,173 @@ This document outlines the core Design Patterns derived from the Feature Mindmap
 
 ## TABLE 1: DATABASE OBJECTS (Logical Schema Layer)
 
-| Feature / Class | Design Pattern | Problem & Rationale | Unit Test (TDD) Implementation Strategy |
-| :--- | :--- | :--- | :--- |
-| **Catalog Management**<br>`CatalogManager` | **Singleton** | The database instance must have one centralized, globally accessible registry for all schemas to prevent synchronization conflicts. | Test accessing the instance from multiple parallel threads to ensure only one memory address is generated. |
-| **Table Creation**<br>`SchemaBuilder`, `TableBuilder` | **Nested Builder** | Initializing a hierarchy (Schema contains Tables, Tables contain Columns) is bulky. Nested Builders allow cascading fluent configurations. | Test the fluent method chaining (`.with_table().with_column().build()`) to verify it returns a valid composite tree without missing nodes. |
-| **Constraint Validation**<br>`Constraint` (Base) | **Strategy** | Extracts validation logic (Check, Unique) away from the `Table` class, preventing the `insert_row` method from bloating with if/else chains. | Test using isolated mock strategies or simulated bad data rows to catch specific `ConstraintViolationException` violations. |
-| **Validation Context**<br>`ConstraintContext` | **Parameter Object** | Reduces method signature bloat (avoid passing `row`, `table`, `schema` individually). Packages all validation state into a single immutable context envelope. | Test that the context successfully binds references to the input Table and Row without mutating them. |
-| **Referential Integrity**<br>`ForeignKeyConstraint`,<br>`IReferentialAction` | **Strategy** | Hardcoding `CASCADE` vs `RESTRICT` logic inside the Table creates spaghetti code. Exposing them as interchangeable strategies allows dynamic FK behavior. | Create mock actions (`CascadeAction`, `RestrictAction`) and test if the parent deletion successfully triggers the correct child table cascade or exception. |
-| **Index Creation**<br>`IndexFactory` | **Factory Method** | The DBMS supports various Index types (Hash, B-Tree). The core system shouldn't hardcode their instantiation. | Call the Factory with a flag (`type="BTREE"`) and test if the inserted Node correctly routes through the B-Tree logic flow. |
-| **Column Definition**<br>`Column`, `ColumnBuilder` | **Value Object** | A Column is immutable after creation (name + type fixed). Enforces that structure cannot mutate during runtime. | Test that two Columns with same name/type are equal, and that mutating properties raises an error. |
-| **Row Data**<br>`Row` | **Value Object** | A Row represents a snapshot of data at insert time. Immutable values prevent dirty reads and concurrent modification bugs. | Test that Row is constructed with fixed-length values matching Column schema, and equality is value-based not reference-based. |
-| **Database Entry Point**<br>`Database` | **Facade** | `Database` wraps the `CatalogManager` + `SchemaBuilder` internals and exposes a clean API: `create_schema`, `drop_schema`, `get_schema`. The caller never touches the subsystems directly. | Test that calling `db.create_schema("public")` correctly persists the schema through `CatalogManager`. |
-| **Database Lifecycle**<br>`DatabaseCatalog` | **Factory Method** | Controls the creation and deletion of `Database` objects. Prevents duplicate names and acts as the single source of truth for all active databases, mirroring `IndexFactory`. | Test that `DatabaseCatalog.create_database("Tiki")` returns a `Database` instance, and that creating a duplicate name raises `DatabaseExistsException`. |
-| **Data Partitioning**<br>`PartitionStrategy` | **Strategy Pattern** | Routing rows across multiple partition ranges shouldn't clutter the main `Table`'s `insert_row` logic. Delegating the routing handles Overlaps, Boundaries, and Not-Found cleanly. | Test `route_row` on explicit mathematical boundaries. Test that overlapping ranges throw `PartitionRangeOverlapException`. |
-| **Schema Management**<br>`Schema`, `DatabaseObject` | **Composite Pattern** | Managing Tables, Views, and Sequences as explicit disparate types makes Schema code messy. Using a Component interface (`DatabaseObject`) allows treating all Leaf objects uniformly. | Test that `Table`, `View`, and `Sequence` can all be added generically to the Schema, and that calling `drop()` cascades correctly. |
-| **Virtual Tables**<br>`View` | **Proxy / Adapter Pattern** | A View acts as a virtual table, shielding users from complex joins. It proxies `SELECT` queries to underlying tables without physically storing data. | Test that `resolve(schema)` correctly throws `NotImplementedError` or translates the query using actual Schema objects safely. |
-| **Auto Increment ID**<br>`Sequence` | **State Pattern** | Sequences must maintain a thread-safe incrementing state across concurrent inserts across the DBMS system. | Test that traversing `next_value()` incrementally increments the state, and limits are respected. |
-| **Executable Logic**<br>`StoredProcedure` | **Command Pattern** | Allows defining and packaging custom procedural SQL/Logic into isolated, executable blocks. The system simply blind-triggers `execute()`. | Test that invoking `execute()` with parameters successfully delegates to the underlying runtime environment. |
+| Priority | Feature / Class | Design Pattern | Problem & Architecture Need | Application / Usage | Unit Test (TDD) Implementation Strategy |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **P1** | `CatalogManager` | **Singleton** | A DBMS must have exactly one global registry for all schemas. Multiple instances would lead to split-brain state synchronization bugs. | `cm1 = CatalogManager()`<br>`cm2 = CatalogManager()`<br>`assert cm1 is cm2 # True` | Test that concurrent thread access always returns the same memory address. Verify that `add_schema()` persists across calls. |
+| **P1** | `DatabaseCatalog` | **Factory Method** | Centralizes `Database` object creation. Prevents duplicate DB names and keeps the system as the single source of truth for all active databases. | `db = DatabaseCatalog.create_database("Tiki")`<br>`# Duplicate → raise DatabaseExistsException` | Test that `create_database("X")` returns a `Database`, and that calling it again with `"X"` raises `DatabaseExistsException`. |
+| **P1** | `Database` | **Facade** | The `Database` class must shield the client from internal complexity (CatalogManager + SchemaBuilder). Client only needs one clean API. | `db.create_schema("public")`<br>`# Client never sees CatalogManager internally` | Test that `create_schema("public")` persists the schema, and `get_schema()` returns the same object. |
+| **P1** | `Schema`, `DatabaseObject` | **Composite Pattern** | A Schema contains Tables, Views, Sequences. Drop operations must propagate uniformly without type-checking each child. | `schema.drop()`<br>`# Internally calls .drop() on ALL children,`<br>`# regardless of whether they are Table or View` | Test that `add_table()`, `add_view()`, and `add_sequence()` are accepted uniformly. Test `drop()` cascades without errors. |
+| **P1** | `SchemaBuilder` | **Builder Pattern** | Constructing a full Schema requires complex Setup. Fluent Builder abstraction removes structural noise. | `schema = SchemaBuilder("db")`<br>`.with_table("users").build()` | Test fluent chaining builds a valid Schema tree. Test missing fields raise `ValueError`. |
+| **P1** | `TableBuilder` | **Builder Pattern** | Initializing a Table with dozens of Columns/Constraints manually causes bloated constructors. | `table = TableBuilder("users")`<br>`.with_column("id", "int").build()` | Test fluent column accumulation. Test duplicate columns raise Exceptions. |
+| **P1** | `Column` | **Value Object** | Once a column is defined (name + type), it must not mutate. Immutability prevents inconsistent schema drift at runtime. | `col = Column("id", "int")`<br>`col.name = "x" # Raises AttributeError`<br>`Column("id","int") == Column("id","int") # True` | Test that post-creation mutation raises `AttributeError`. Test that two columns with equal fields are equal via `__eq__`. |
+| **P1** | `Row` | **Value Object** | A Row is a snapshot of data at insert-time. Mutable rows cause dirty reads in concurrent environments. | `r1 = Row((1, "Alice"))`<br>`r1.values[0] = 99 # Raises TypeError`<br>`Row((1,"A")) == Row((1,"A")) # True` | Test that all values are wrapped in an immutable tuple. Test equality is value-based, not reference-based. |
+| **P1** | `Constraint` | **Strategy Pattern** | Validation logic (Check, Unique, Not Null) embedded inside `Table.insert_row` creates unreadable bloat. Strategy externalizes each rule as a swappable object. | `unique_validator.validate(ctx)`<br>`# Table loops validators without knowing their type` | Test each strategy independently with mock contexts. Test `ConstraintViolationException` for a bad row, and `True` for a valid one. |
+| **P1** | `ConstraintContext` | **Parameter Object** | Passing `row, table, schema` as separate arguments to every validator bloats method signatures. One immutable envelope bundles all state. | `ctx = ConstraintContext(row, table)`<br>`validator.validate(ctx) # Single clean argument` | Test that the context binds references to Table and Row without mutating their internal state. |
+| **P2** | `ForeignKeyConstraint`, `IReferentialAction` | **Strategy Pattern** | Hardcoding `CASCADE` or `RESTRICT` inside Table classes creates spaghetti. Injecting strategies allows dynamic FK behavior at creation time. | `fk = ForeignKeyConstraint("user_id",`<br>`    on_delete=CascadeAction())`<br>`# Deleting parent → auto cascade to child` | Create mock `CascadeAction` and `RestrictAction`. Test parent deletion correctly triggers child cascade or exception. |
+| **P2** | `IndexFactory` | **Factory Method** | DBMS supports different Index types (B-Tree, Hash). Core classes must not hardcode algorithm instantiation. | `idx = IndexFactory.create("BTREE")`<br>`idx.insert("alice", ptr) # Type-specific impl.` | Test `create("BTREE")` returns a B-Tree instance and `create("HASH")` a Hash instance. Test invalid types raise `ValueError`. |
+| **P2** | `PartitionStrategy` | **Strategy Pattern** | Row routing to physical partitions (by key range) must not clutter the main `Table.insert_row` logic with boundary conditions. | `partition_name = strategy.route_row(row.key)`<br>`# Table blindly delegates routing to Strategy` | Test exact boundary conditions (in-range returns partition name). Test out-of-range throws `PartitionNotFoundException`. Overlapping ranges throw `PartitionRangeOverlapException`. |
+| **P3** | `Sequence` | **State Pattern** | Auto-numbering (e.g. `AUTO_INCREMENT`) must maintain a thread-safe, in-memory counter that advances precisely. | `seq = Sequence("id_seq", start=1, increment=1)`<br>`seq.next_value() # → 1`<br>`seq.next_value() # → 2` | Test that `next_value()` advances by exactly `increment`. Test multiple calls return strictly sequential values with no skips. |
+| **P3** | `View` | **Proxy / Adapter** | A View hides multi-table JOINs behind a virtual table interface. Client queries `my_view` as if it were a real Table, unaware of the complexity. | `view = View("active_users", "SELECT * FROM users WHERE active=1")`<br>`result = view.resolve(schema) # Proxies query to Engine` | Test `resolve(schema)` returns compiled output. Test that a missing dependency table raises `DependencyViolationException`. |
+| **P3** | `StoredProcedure` | **Command Pattern** | Pre-packaged SQL logic must be callable without the client knowing the internals. The system only needs to trigger `execute()`. | `proc = StoredProcedure("clean_logs", body="DELETE...")`<br>`proc.execute(days=30) # Triggers encapsulated logic` | Test `execute(params)` delegates correctly. Test a missing required parameter raises `TypeError`. Test transaction failures propagate upward. |
 
 
-### 1.1. Sequence Diagram: Builder Pattern
+
+### 1.1. Sequence Diagram: Singleton Pattern (CatalogManager)
 ```mermaid
 sequenceDiagram
     participant Client
-    participant S_Build as SchemaBuilder
-    participant T_Build as TableBuilder
-    participant Schema
-    participant Table
-    
-    Client->>S_Build: new SchemaBuilder("public")
-    activate S_Build
-    
-    Client->>S_Build: with_table("users")
-    S_Build->>T_Build: create("users")
-    activate T_Build
-    T_Build->>T_Build: with_column("id")
-    T_Build->>T_Build: with_column("name")
-    T_Build-->>S_Build: return TableBuilder
-    deactivate T_Build
-    
-    Client->>S_Build: build()
-    S_Build->>Schema: instantiate()
-    S_Build->>T_Build: build()
-    T_Build->>Table: instantiate()
-    T_Build-->>Schema: add_table(Table)
-    S_Build-->>Client: return Schema
-    deactivate S_Build
-```
-
-### 1.2. Sequence Diagram: Strategy Pattern (Constraint)
-```mermaid
-sequenceDiagram
-    participant Test as Unit Test
-    participant Table
-    participant Val as IConstraintValidator (Unique)
-    
-    Test->>Table: add_validator(Val)
-    Test->>Table: insert_row(row)
-    activate Table
-    Table->>Val: validate(row)
-    alt Value matches
-        Val-->>Table: true
-        Table->>Table: _rows.append(row)
-        Table-->>Test: void
-    else Duplicate Value
-        Val-->>Table: throw ConstraintViolationException
-        Table-->>Test: throw Exception (Caught by Test)
-    end
-    deactivate Table
-```
-
-### 1.3. Sequence Diagram: Singleton Pattern (CatalogManager)
-```mermaid
-sequenceDiagram
-    participant Test as Unit Test
     participant CM as CatalogManager
     participant RAM as Memory (_instance)
     
-    Test->>CM: new CatalogManager()
+    Client->>CM: new CatalogManager()
     activate CM
     CM->>CM: py__new__()
-    alt _instance is None (First Call)
+    
+    alt _instance is None
         CM->>RAM: Allocate Memory
         CM->>CM: Create _schemas{} Dictionary
-    end
-    CM-->>Test: return RAM Address
-    deactivate CM
-    
-    Test->>CM: new CatalogManager() (Second Call)
-    activate CM
-    CM->>CM: py__new__()
-    alt _instance already exists
-        CM-->>Test: return same RAM Address
+        CM-->>Client: return New RAM Address
+    else _instance already exists
+        CM-->>Client: return same RAM Address
     end
     deactivate CM
 ```
 
-### 1.4. Sequence Diagram: Factory Method (IndexFactory)
-```mermaid
-sequenceDiagram
-    participant Client as Unit Test
-    participant Factory as IndexFactory
-    participant BTree as BTreeIndex
-    participant Hash as HashIndex
-    
-    Client->>Factory: create_index("BTREE", "idx_id", ["id"])
-    activate Factory
-    alt type == "BTREE"
-        Factory->>BTree: instantiate
-        BTree-->>Factory: BTreeIndex object
-    else type == "HASH"
-        Factory->>Hash: instantiate
-        Hash-->>Factory: HashIndex object
-    else invalid type
-        Factory-->>Client: throw ValueError
-    end
-    Factory-->>Client: return Index object
-    deactivate Factory
-```
 
-### 1.5. Sequence Diagram: Table-Index Integration (insert_row flow)
-```mermaid
-sequenceDiagram
-    participant Client
-    participant Table
-    participant Val as IConstraintValidator (Strategy)
-    participant Factory as IndexFactory
-    participant Idx as Index (BTree/Hash)
-
-    Client->>Table: insert_row(row)
-    activate Table
-
-    Table->>Table: _validate_value_count(row)
-    alt Column count mismatch
-        Table-->>Client: throw RowSchemaMismatchException
-    end
-
-    loop Each validator in _validators
-        Table->>Val: validate(ConstraintContext)
-        alt Violation detected
-            Val-->>Table: throw ConstraintViolationException
-            Table-->>Client: propagate exception
-        else OK
-            Val-->>Table: true
-        end
-    end
-
-    Table->>Table: _rows.append(row)
-
-    loop Each index in _indexes
-        Table->>Idx: insert(key, record_pointer)
-        Idx-->>Table: void
-    end
-
-    Table-->>Client: void
-    deactivate Table
-```
-
-### 1.6. Sequence Diagram: Factory Method & Facade (Database Lifecycle)
+### 1.2. Sequence Diagram: Factory Method (DatabaseCatalog)
 ```mermaid
 sequenceDiagram
     participant Client
     participant DC as DatabaseCatalog (Factory)
     participant DB as Database (Facade)
-    participant CM as CatalogManager (Singleton)
 
-    %% Phase 1: Factory Creates Database
     Client->>DC: create_database("ecommerce")
     activate DC
-    DC->>DC: Check name collision
-    DC->>DB: new Database("ecommerce")
-    DB-->>DC: Database instance
-    DC-->>Client: return Database object
+    DC->>DC: Check for Name collision
+    alt Name Already Exists
+        DC-->>Client: throw DatabaseExistsException
+    else Valid Name
+        DC->>DB: new Database("ecommerce")
+        DB-->>DC: Database instance
+        DC->>DC: Register db into _databases{}
+        DC-->>Client: return Database object
+    end
     deactivate DC
+```
 
-    %% Phase 2: Facade Delegates Schema Creation
+### 1.3. Sequence Diagram: Facade Pattern (Database API)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant DB as Database (Facade)
+    participant CM as CatalogManager (Singleton)
+    participant SB as SchemaBuilder
+
     Client->>DB: create_schema("public")
     activate DB
-    DB->>CM: add_schema(schema object)
-    CM-->>DB: success
-    DB-->>Client: void
+    DB->>SB: Instantiate SchemaBuilder("public").build()
+    SB-->>DB: Return clean Schema tree
+    DB->>CM: Pass to CatalogManager for storage
+    CM-->>DB: Flag persist success
+    DB-->>Client: void (Client is completely blind to CM or SB)
     deactivate DB
 ```
 
-### 1.6. Sequence Diagram: Value Object (Row / Column Immutability)
+### 1.4. Sequence Diagram: Composite Pattern (Schema Drop)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Sch as Schema (Composite)
+    participant Tbl as Table (Leaf)
+    participant View as View (Leaf)
+
+    Client->>Sch: drop()
+    activate Sch
+    Sch->>Sch: Iterate over self._objects list
+    
+    loop For each DatabaseObject
+        alt object is Table
+            Sch->>Tbl: drop()
+            Tbl-->>Sch: void
+        else object is View
+            Sch->>View: drop()
+            View-->>Sch: void
+        end
+    end
+    Sch-->>Client: void
+    deactivate Sch
+```
+
+### 1.5. Sequence Diagram: Builder Pattern (Table Creation)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant TB as TableBuilder
+    participant Col as Column
+    participant Tbl as Table
+    
+    Client->>TB: new TableBuilder("users")
+    activate TB
+    
+    Client->>TB: with_column("id", "int")
+    TB->>Col: new Column("id", "int")
+    Col-->>TB: Column instance
+    TB->>TB: Lưu Column vào self._columns[]
+    
+    Client->>TB: build()
+    TB->>Tbl: new Table("users")
+    TB->>Tbl: Đổ danh sách _columns vào Table
+    Tbl-->>TB: Table instance sạch sẽ
+    TB-->>Client: return Table
+    deactivate TB
+```
+
+### 1.6. Sequence Diagram: Builder Pattern (SchemaBuilder)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant SB as SchemaBuilder
+    participant TB as TableBuilder
+    participant Sch as Schema
+    
+    Client->>SB: new SchemaBuilder("public")
+    activate SB
+    
+    Client->>SB: with_table("users")
+    SB->>TB: new TableBuilder("users")
+    activate TB
+    TB-->>SB: TableBuilder Reference
+    SB->>SB: Lưu TB vào self._table_builders[]
+    
+    %% Triggers Fluent Chaining directly on the returned TB
+    Client->>TB: with_column("id", "int")
+    
+    Client->>SB: build()
+    SB->>Sch: new Schema("public")
+    
+    loop Dọn dẹp nhà thầu phụ
+        SB->>TB: build()
+        TB-->>SB: Table instance
+        SB->>Sch: add_table(Table)
+    end
+    
+    Sch-->>SB: Schema instance hoàn mỹ
+    SB-->>Client: return Schema
+    deactivate TB
+    deactivate SB
+```
+
+### 1.7. Sequence Diagram: Value Object (Row / Column Immutability)
 ```mermaid
 sequenceDiagram
     participant Client
@@ -217,97 +200,87 @@ sequenceDiagram
     VO-->>Client: return boolean
     deactivate VO
 ```
-
-### 1.7. Sequence Diagram: Composite Pattern (Schema DDL Cascade)
+### 1.8. Sequence Diagram: Strategy Pattern (Constraint)
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant Sch as Schema (Composite)
-    participant Tbl as Table (DatabaseObject)
-    participant Vw as View (DatabaseObject)
+    participant Test as Unit Test
+    participant Table
+    participant Val as Constraint (Strategy)
+    participant Ctx as ConstraintContext (Parameter Object)
     
-    %% Recursive Drop Operation
-    Client->>Sch: drop()
-    activate Sch
-    Sch->>Sch: Validate ownership/permissions (Future)
+    Test->>Table: add_constraint(Val)
+    Test->>Table: insert_row(row)
+    activate Table
     
-    loop For each object in _tables, _views, _sequences, _procedures
-        Sch->>Tbl: drop()
-        activate Tbl
-        Tbl->>Tbl: Check cross-table Foreign Keys
-        alt FK Dependency Exists (Aggregate Root rule)
-            Tbl-->>Sch: throw DependencyViolationException
-            Sch-->>Client: bubble up Exception (Rollback)
-        else Safe to Drop
-            Tbl->>Tbl: execute internal wipe
-            Tbl-->>Sch: void
-        end
-        deactivate Tbl
-        
-        Sch->>Vw: drop()
-        Vw-->>Sch: void
+    %% Tạo giỏ Parameter chứa cả row mồi, table hiện tại và schema tổng
+    Table->>Ctx: new ConstraintContext(row, table, schema)
+    
+    Table->>Val: validate(Ctx)
+    alt Xuyên biên giới an toàn
+        Val-->>Table: true
+        Table->>Table: _rows.append(row)
+        Table-->>Test: void
+    else Bị tóm cổ (Vi phạm)
+        Val-->>Table: throw ConstraintViolationException
+        Table-->>Test: throw Exception (Test đón lõng)
     end
-    
-    Sch-->>Client: success
-    deactivate Sch
+    deactivate Table
 ```
 
-### 1.8. Sequence Diagram: PartitionStrategy (Strategy Pattern)
+### 1.9. Sequence Diagram: Strategy Pattern (Referential Integrity)
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant T as Table
-    participant PS as PartitionStrategy
+    participant Table
+    participant FK as ForeignKeyConstraint
+    participant Action as IReferentialAction (Strategy)
+    participant ChildTable
     
-    Client->>T: insert_row(row)
-    activate T
-    T->>PS: route_row(row.key)
-    activate PS
+    %% Khi một hàng cha bị xóa đi
+    Table->>FK: notify_parent_deleted(parent_row)
+    activate FK
+    FK->>Action: execute(parent_row, child_table)
+    activate Action
     
-    alt Key falls within Range A
-        PS-->>T: return "Partition_A"
-    else Key falls within Range B
-        PS-->>T: return "Partition_B"
-    else Key out of bounds
-        PS-->>T: throw PartitionNotFoundException
-    end
-    deactivate PS
-    
-    alt Partition Found
-        T->>T: Insert into corresponding Partition Object
-    else Exception
-        T-->>Client: abort insert
+    %% Quyền sinh sát lúc này nằm trong tay Strategy
+    alt Strategy là Cascade
+        Action->>ChildTable: delete_rows(foreign_key = target)
+        ChildTable-->>Action: void
+    else Strategy là Restrict
+        Action-->>FK: throw ConstraintViolationException
+    else Strategy là SetNull
+        Action->>ChildTable: update_rows(foreign_key = target, NULL)
+        ChildTable-->>Action: void
     end
     
-    T-->>Client: success
-    deactivate T
+    Action-->>FK: báo cáo kết quả
+    deactivate Action
+    FK-->>Table: void / Exception propagation
+    deactivate FK
 ```
 
-### 1.9. Sequence Diagram: View (Proxy) & StoredProcedure (Command)
+### 1.10. Sequence Diagram: Factory Method (IndexFactory)
 ```mermaid
 sequenceDiagram
-    participant Client
-    participant V as View (Proxy)
-    participant SP as StoredProcedure (Command)
-    participant Engine as Query Engine (Subsystem)
+    participant Client as Unit Test
+    participant Factory as IndexFactory
+    participant BTree as BTreeIndex
+    participant Hash as HashIndex
     
-    %% Proxy Pattern Flow shielding underlying Tables
-    Client->>V: SELECT * FROM active_users_view
-    activate V
-    V->>V: resolve(schema)
-    V->>Engine: compile("SELECT * FROM users WHERE active=1")
-    Engine-->>V: Raw Result Set
-    V-->>Client: Proxy Result Set (Virtual Table)
-    deactivate V
-    
-    %% Command Pattern Flow for pre-packaged logic
-    Client->>SP: execute(employee_id=45)
-    activate SP
-    SP->>Engine: Eval("DELETE FROM logs WHERE id=45")
-    Engine-->>SP: success
-    SP-->>Client: success
-    deactivate SP
+    Client->>Factory: create_index("BTREE", "idx_id", ["id"])
+    activate Factory
+    alt type == "BTREE"
+        Factory->>BTree: instantiate
+        BTree-->>Factory: BTreeIndex object
+    else type == "HASH"
+        Factory->>Hash: instantiate
+        Hash-->>Factory: HashIndex object
+    else invalid type
+        Factory-->>Client: throw ValueError
+    end
+    Factory-->>Client: return Index object (BTree/Hash giấu mặt)
+    deactivate Factory
 ```
+
 
 ### 1.10. High-Level Class Diagram (Structural View)
 ```mermaid
