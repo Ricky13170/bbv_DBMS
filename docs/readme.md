@@ -203,7 +203,7 @@ sequenceDiagram
 ```mermaid
 classDiagram
     %% ----------------------------------------------------
-    %% FACADE PATTERN (Áp dụng cho Database)
+    %% FACADE PATTERN (Applied to Database)
     %% ----------------------------------------------------
 
     class Client {
@@ -226,12 +226,12 @@ classDiagram
         +store_schema(schema_db: dict)
     }
 
-    %% Client chỉ giao tiếp với Facade
-    Client --> Database : Gọi API Face đại diện
+    %% Client only interacts with the Facade
+    Client --> Database : Calls clean API
 
-    %% Facade điều phối các Subsystem phức tạp bên dưới
-    Database --> SchemaBuilder : Ủy quyền xây dựng
-    Database --> CatalogManager : Ủy quyền lưu trữ
+    %% Facade orchestrates complex Subsystems below
+    Database --> SchemaBuilder : Delegates construction
+    Database --> CatalogManager : Delegates storage
 ```
 
 **Implementation Example:**
@@ -247,15 +247,15 @@ class CatalogManager:
 class Database:
     def __init__(self, db_name: str):
         self.name = db_name
-        self.builder = SchemaBuilder()
         self.catalog_manager = CatalogManager()
     
     def create_schema(self, schema_name: str):
-        new_schema = self.builder.build(schema_name)
+        # Instantiate SchemaBuilder inside the method to match Sequence Diagram 1.3
+        new_schema = SchemaBuilder().build(schema_name)
         self.catalog_manager.store_schema(new_schema)
         print("Done")
 
-# --- Client execute ---
+# --- Client Execution ---
 db = Database("ShopeeDB")
 db.create_schema("public")
 db.create_schema("auth service")
@@ -284,6 +284,97 @@ sequenceDiagram
     end
     Sch-->>Client: void
     deactivate Sch
+```
+
+### 1.4a. Class Diagram: Composite Pattern (Schema / DatabaseObject)
+```mermaid
+classDiagram
+    %% ----------------------------------------------------
+    %% COMPOSITE PATTERN (Applied to Schema)
+    %% ----------------------------------------------------
+
+    class Client {
+    }
+
+    class DatabaseObject {
+        <<Interface / Component>>
+        +name: str
+        +drop()*
+    }
+
+    class Table {
+        <<Leaf>>
+        +drop()
+    }
+
+    class View {
+        <<Leaf>>
+        +drop()
+    }
+
+    class Schema {
+        <<Composite>>
+        -_objects: list~DatabaseObject~
+        +add_object(db_object: DatabaseObject)
+        +drop()
+    }
+
+    %% Inheritance - All are Components
+    DatabaseObject <|-- Table
+    DatabaseObject <|-- View
+    DatabaseObject <|-- Schema
+
+    %% Aggregation - Schema (Composite) holds a list of Components
+    DatabaseObject <--o Schema : _objects (children)
+
+    %% Client interacts with the common Interface
+    Client --> DatabaseObject : Calls drop()
+```
+
+**Implementation Example:**
+```python
+class DatabaseObject:
+    def __init__(self, name):
+        self.name = name
+        
+    def drop(self):
+        raise NotImplementedError()
+
+class Table(DatabaseObject):
+    def drop(self):
+        print(f"Table '{self.name}' drop")
+
+class View(DatabaseObject):
+    def drop(self):
+        print(f"View '{self.name}' drop")
+        
+class Schema(DatabaseObject):
+    def __init__(self, name):
+        super().__init__(name)
+        self._objects = []
+        
+    def add_object(self, db_object: DatabaseObject):
+        self._objects.append(db_object)
+        
+    def drop(self):
+        print(f"Schema '{self.name}' drop begin")
+        # Delegate all work to child components
+        for obj in self._objects:
+            obj.drop()
+        print(f"Schema '{self.name}' drop done")
+        
+# --- Client Execution ---
+schema_public = Schema("public")
+tbl_user = Table("user")
+tbl_order = Table("order")
+view_active = View("Active")
+
+schema_public.add_object(tbl_user)
+schema_public.add_object(tbl_order)
+schema_public.add_object(view_active)
+
+# One call cascades to all children seamlessly
+schema_public.drop()
 ```
 
 ### 1.5. Sequence Diagram: Builder Pattern (Table Creation)
