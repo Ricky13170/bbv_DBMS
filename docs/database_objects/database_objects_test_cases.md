@@ -6,55 +6,52 @@ This document outlines the test cases and class contracts for the top-level logi
 
 ```mermaid
 flowchart LR
-    Subsystem[Database Objects] --> Schema
-    Schema --> AddTable_WhenTableIsValid_ShouldRegisterTable
-    Schema --> AddTable_WhenNameAlreadyExists_ShouldThrow
-    Schema --> RemoveTable_WhenTableExists_ShouldRemoveTable
+    Subsystem[Database Objects Tests]
     
-    Subsystem --> Table
-    Table --> InsertRow_WhenRowIsValid_ShouldInsertRow
-    Table --> InsertRow_WhenSchemaDoesNotMatch_ShouldThrow
-    Table --> AddColumn_WhenNameAlreadyExists_ShouldThrow
+    %% Core Management Tests
+    Subsystem --> CM[CatalogManager Singleton]
+    CM --> CM_Singleton[AddSchema_WhenInstanceRequested_ReturnsSameSingleton]
+    CM --> CM_State[GetSchema_WhenSchemaMissing_ShouldThrowError]
     
-    Subsystem --> Column
-    Column --> Create_WhenDefinitionIsValid_ShouldCreateColumn
-    Column --> Create_WhenNameIsInvalid_ShouldThrow
-    Column --> ValidateValue_WhenTypeDoesNotMatch_ShouldReturnFalse
+    Subsystem --> DC[DatabaseCatalog Factory]
+    DC --> DC_Create[CreateDatabase_WhenNameIsValid_ReturnsDatabaseFacade]
+    DC --> DC_Conflict[CreateDatabase_WhenNameExists_ThrowsException]
     
-    Subsystem --> Row
-    Row --> GetValue_WhenColumnExists_ShouldReturnValue
-    Row --> SetValue_WhenValueIsValid_ShouldUpdateValue
-    Row --> SetValue_WhenTypeDoesNotMatch_ShouldThrow
+    Subsystem --> Facade[Database Facade]
+    Facade --> DB_CreateSchema[CreateSchema_DelegatesToCatalogManager]
     
-    Subsystem --> Constraint
-    Constraint --> Validate_WhenValueSatisfiesConstraint_ShouldSucceed
-    Constraint --> Validate_WhenValueViolatesConstraint_ShouldFail
-    Constraint --> Apply_WhenConstraintIsDisabled_ShouldSkipValidation
+    %% Builder Tests
+    Subsystem --> Builders[Schema & Table Builders]
+    Builders --> BuildSchema[SchemaBuilder_WithTable_BuildsCompositeSchema]
+    Builders --> BuildTable[TableBuilder_WithColumn_BuildsLeafTable]
     
-    Subsystem --> ForeignKey
-    ForeignKey --> Validate_WhenParentRecordExists_ShouldSucceed
-    ForeignKey --> Validate_WhenParentRecordDoesNotExist_ShouldFail
-    ForeignKey --> DeleteParent_WhenRestricted_ShouldRejectDeletion
+    %% Composite Tests
+    Subsystem --> Composite[Schema & Table Composite]
+    Composite --> Schema_AddTable[AddTable_WhenValid_RegistersTable]
+    Composite --> Table_InsertRow[InsertRow_WhenValidRow_AddsToTable]
+    Composite --> DDL_Drop[Drop_WhenInvoked_ExecutesCleanup]
     
-    Subsystem --> Index
-    Index --> Insert_WhenKeyIsValid_ShouldAddEntry
-    Index --> Search_WhenKeyExists_ShouldReturnRecordPointer
-    Index --> Insert_WhenUniqueKeyAlreadyExists_ShouldThrow
+    %% Value Object Tests
+    Subsystem --> VO[Column & Row Value Objects]
+    VO --> Col_InvalidType[Init_WhenTypeUnsupported_ThrowsValueError]
+    VO --> Row_Immutability[Init_WhenCreated_TuplePreventsMutation]
     
-    Subsystem --> Partition
-    Partition --> RouteRow_WhenKeyMatchesRange_ShouldReturnPartition
-    Partition --> RouteRow_WhenKeyIsOutsideRange_ShouldFail
-    Partition --> AddRange_WhenRangesOverlap_ShouldThrow
+    %% Strategy Tests
+    Subsystem --> Strategy[Constraint & Partition Strategy]
+    Strategy --> Ctx_Strategy[Validate_WithConstraintContext_ReturnsBoolean]
+    Strategy --> FK_Strategy[Validate_DelegatesToReferentialActionStrategy]
+    Strategy --> Routing[RouteRow_WhenKeyMatches_DelegatesToPartition]
     
-    Subsystem --> View
-    View --> Create_WhenQueryIsValid_ShouldCreateView
-    View --> Resolve_WhenDependenciesExist_ShouldReturnDefinition
-    View --> Resolve_WhenDependencyIsMissing_ShouldThrow
+    %% Behavior Pattern Tests
+    Subsystem --> Behaviors[View, Sequence, StoredProcedure]
+    Behaviors --> View_Proxy[Resolve_WhenCalled_ActsAsVirtualProxy]
+    Behaviors --> Seq_State[NextValue_WhenCalled_UpdatesInternalState]
+    Behaviors --> Proc_Command[Execute_WhenInvoked_ExecutesCommandLogic]
     
-    Subsystem --> StoredProcedure
-    StoredProcedure --> Execute_WhenParametersAreValid_ShouldReturnResult
-    StoredProcedure --> Execute_WhenRequiredParameterIsMissing_ShouldThrow
-    StoredProcedure --> Execute_WhenTransactionFails_ShouldPropagateFailure
+    %% Factory Tests
+    Subsystem --> Factory[IndexFactory]
+    Factory --> Idx_Create[Create_WhenTypeIsBTree_ReturnsBTreeIndex]
+    Factory --> Idx_Unsupported[Create_WhenTypeUnsupported_ThrowsValueError]
 ```
 
 ## 2. Derived Method Contracts (Detailed Class Diagram)

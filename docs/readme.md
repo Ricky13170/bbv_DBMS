@@ -27,7 +27,27 @@ This document outlines the core Design Patterns derived from the Feature Mindmap
 
 
 
-### 1.1. Sequence Diagram: Singleton Pattern (CatalogManager)
+### 1.1a. Class Diagram: Singleton Pattern (CatalogManager)
+```mermaid
+classDiagram
+    class Client {
+    }
+    
+    class CatalogManager {
+        <<Singleton>>
+        -_instance : CatalogManager$
+        -_schemas : dict
+        +__new__(cls)$ CatalogManager
+        +get_schema(name) Schema
+        +add_schema(schema)
+        +remove_schema(name)
+    }
+    
+    Client ..> CatalogManager : Requests instance
+    CatalogManager --> CatalogManager : Holds unique _instance
+```
+
+### 1.1b. Sequence Diagram: Singleton Pattern (CatalogManager)
 ```mermaid
 sequenceDiagram
     participant Client
@@ -48,6 +68,21 @@ sequenceDiagram
     deactivate CM
 ```
 
+**Implementation Example:**
+```python
+class CatalogManager:
+    _instance = None
+    
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super(CatalogManager, cls).__new__(cls)
+        return cls._instance
+        
+obj1 = CatalogManager()
+obj2 = CatalogManager()
+
+print(obj1 is obj2) # True
+```
 
 ### 1.2. Sequence Diagram: Factory Method (DatabaseCatalog)
 ```mermaid
