@@ -405,183 +405,211 @@ sequenceDiagram
 ### 1.15. High-Level Class Diagram (Structural View)
 ```mermaid
 classDiagram
-    %% Core Singleton & Factories
-    class CatalogManager {
-        <<Singleton>>
-        -schemas: dict
-        +add_schema()
-    }
-    class DatabaseCatalog {
-        <<Factory Method>>
-        -databases: dict
-        +create_database(name) Database
-    }
-    class Database {
-        <<Facade>>
-        +create_schema(name)
-    }
+    %% Core Management
+    class CatalogManager {<<Singleton>>}
+    class DatabaseCatalog {<<Factory Method>>}
+    class Database {<<Facade>>}
     
-    DatabaseCatalog --> Database: creates
-    Database --> CatalogManager: delegates to
+    %% Builders
+    class SchemaBuilder {<<Builder>>}
+    class TableBuilder {<<Builder>>}
+    
+    %% Composite Layer
+    class DatabaseObject {<<Component>>}
+    class Schema {<<Composite>>}
+    class Table {<<Leaf>>}
+    class View {<<Virtual Proxy>>}
+    class Sequence {<<State>>}
+    class StoredProcedure {<<Command>>}
+    
+    %% Table Internals
+    class Row {<<Value Object>>}
+    class Column {<<Value Object>>}
+    class Constraint {<<Strategy>>}
+    class ConstraintContext {<<Parameter Object>>}
+    class IReferentialAction {<<Strategy>>}
+    class ForeignKeyConstraint {<<Concrete Strategy>>}
+    
+    class PartitionStrategy {<<Strategy>>}
+    class IndexFactory {<<Factory Method>>}
+    class Index {<<Factory Product>>}
 
-    %% Composite Pattern (Database Objects)
-    class DatabaseObject {
-        <<Abstract>>
-        +name: str
-        +create()
-        +drop()
-    }
-    class Schema {
-        <<Composite>>
-        -_tables: List[Table]
-        -_views: List[View]
-        +add_table(t: Table)
-    }
-    class Table {
-        <<Leaf>>
-        +insert_row()
-    }
-    class View {
-        <<Proxy>>
-        +resolve()
-    }
-    class Sequence {
-        <<State>>
-        +next_value()
-    }
-    class StoredProcedure {
-        <<Command>>
-        +execute()
-    }
+    %% Relationships...
+    DatabaseCatalog --> Database : creates
+    Database --> CatalogManager : delegates to
+    Database --> SchemaBuilder : utilizes
+
+    SchemaBuilder *-- TableBuilder : orchestrates
+    SchemaBuilder --> Schema : yields
+    TableBuilder --> Table : yields
 
     DatabaseObject <|-- Schema
     DatabaseObject <|-- Table
     DatabaseObject <|-- View
     DatabaseObject <|-- Sequence
     DatabaseObject <|-- StoredProcedure
-    
-    %% Semantic relationship: Schema encapsulates Leaf objects
     Schema o-- DatabaseObject : containing
-
-    %% Table Internal Strategies & Value Objects
-    class PartitionStrategy {
-        <<Strategy>>
-        +route_row(key)
-    }
-    class Constraint {
-        <<Strategy Base>>
-        +validate(ctx: ConstraintContext)
-    }
-    class Column {
-        <<Value Object>>
-        +validate_value()
-    }
-    class Row {
-        <<Value Object>>
-        +values: Tuple
-    }
-    class Index {
-        <<Physical Mapping>>
-        +insert()
-    }
     
     Table *-- Column
     Table *-- Row
     Table *-- Constraint
     Table *-- Index
     Table --> PartitionStrategy : delegates routing
+    Table --> IndexFactory : coordinates
+    
+    Constraint --> ConstraintContext : consumes
+    Constraint <|-- ForeignKeyConstraint
+    ForeignKeyConstraint *-- IReferentialAction : delegates on_delete + on_update
+    IndexFactory --> Index : produces
 ```
 
-### 1.11. Detailed Class Diagram (API & Methods mapped from TDD)
+### 1.16. Detailed Class Diagram (API & Methods mapped from TDD)
 ```mermaid
 classDiagram
-    %% Core Singleton & Factories
+    %% Core Management
+    class CatalogManager {
+        <<Singleton>>
+        +add_schema(schema: Schema)
+        +get_schema(name: str) Schema
+        +remove_schema(name: str)
+    }
     class DatabaseCatalog {
+        <<Factory Method>>
         +create_database(name: str) Database
         +get_database(name: str) Database
         +drop_database(name: str)
     }
-    class CatalogManager {
-        +add_schema(schema: Schema)
-        +get_schema(name: str) Schema
-    }
     class Database {
+        <<Facade>>
         +create_schema(name: str)
         +drop_schema(name: str)
         +get_schema(name: str) Schema
     }
     
-    %% Composite Pattern (Database Objects)
+    %% Builders
+    class SchemaBuilder {
+        <<Builder>>
+        +with_table(name: str) TableBuilder
+        +build() Schema
+    }
+    class TableBuilder {
+        <<Builder>>
+        +with_column(name, data_type) TableBuilder
+        +with_int_column(name) TableBuilder
+        +with_string_column(name) TableBuilder
+        +with_constraint(c: Constraint) TableBuilder
+        +build() Table
+    }
+
+    %% Composite Layer
     class DatabaseObject {
-        <<Abstract>>
+        <<Abstract Component>>
         +name: str
         +create()
         +drop()
     }
     class Schema {
+        <<Composite>>
         +owner: str
         +add_table(t: Table)
         +get_table(name: str) Table
         +drop_table(name: str)
+        +rename_table(old_name: str, new_name: str)
+        +list_all_tables() List
         +add_view(v: View)
+        +get_view(name: str) View
+        +drop_view(name: str)
         +add_sequence(s: Sequence)
+        +get_sequence(name: str) Sequence
+        +drop_sequence(name: str)
         +add_procedure(p: StoredProcedure)
+        +get_procedure(name: str) StoredProcedure
+        +drop_procedure(name: str)
     }
     class Table {
+        <<Leaf / DDL Host>>
         +add_column(c: Column)
         +drop_column(name: str)
-        +alter_column(name, c: Column)
+        +alter_column(name: str, c: Column)
+        +get_column(name: str) Column
+        +contains_column(name: str) bool
         +add_constraint(c: Constraint)
         +drop_constraint(name: str)
         +add_index(idx: Index)
         +insert_row(row: Row)
         +update_row(old_row: Row, new_row: Row)
         +delete_row(row: Row)
+        +contains_row(row: Row) bool
+        +get_primary_index() Index
+        +accept(visitor)
     }
     class View {
+        <<Virtual Proxy>>
         +query_definition: str
         +resolve(schema: Schema) str
     }
     class Sequence {
+        <<State>>
         +start: int
         +increment: int
         +next_value() int
     }
     class StoredProcedure {
+        <<Command>>
         +body: str
         +execute(*args, **kwargs)
     }
 
+    %% Relations (Composite)
     DatabaseObject <|-- Schema
     DatabaseObject <|-- Table
     DatabaseObject <|-- View
     DatabaseObject <|-- Sequence
     DatabaseObject <|-- StoredProcedure
-    
-    %% Semantic relationship: Schema encapsulates Leaf objects
     Schema o-- DatabaseObject : containing
 
-    %% Table Internal Strategies & Value Objects
+    %% Table Internals
+    class ConstraintContext {
+        <<Parameter Object>>
+        +candidate_row: Row
+        +table: Table
+        +schema: Schema
+    }
+    class Constraint {
+        <<Abstract Strategy>>
+        +is_enabled: bool
+        +enable()
+        +disable()
+        +validate(ctx: ConstraintContext)
+    }
+    class IReferentialAction {
+        <<Strategy Interface>>
+        +execute(parent_row, child_table)
+    }
+    class ForeignKeyConstraint {
+        +child_column_name: str
+        +referenced_table_name: str
+        +referenced_column_name: str
+        +on_delete: IReferentialAction
+        +on_update: IReferentialAction
+        +on_parent_row_deleted(parent_row, child_table)
+    }
+    class CascadeAction
+    class RestrictAction
+    class SetNullAction
+    
     class PartitionStrategy {
+        <<Strategy>>
         +add_range(name, start, end)
         +remove_range(name: str)
         +route_row(key: Any) str
     }
-    class Constraint {
-        <<Abstract Strategy>>
-        +validate(ctx: ConstraintContext)
-    }
-    class Column {
-        +name: str
-        +data_type: str
-        +is_nullable: bool
-        +is_primary: bool
-        +validate_value(value: Any) bool
-    }
-    class Row {
-        +values: Tuple
+    class IndexFactory {
+        <<Factory Method>>
+        +create(type, name, columns) Index
     }
     class Index {
+        <<Factory Product>>
         +is_unique: bool
         +allows_null: bool
         +insert(key: Any, ptr: Any)
@@ -589,12 +617,33 @@ classDiagram
         +delete(key: Any, ptr: Any)
         +range_search(start, end) List
     }
+    class Column {
+        <<Value Object>>
+        +name: str
+        +data_type: str
+        +is_nullable: bool
+        +validate_value(value: Any) bool
+    }
+    class Row {
+        <<Value Object>>
+        +values: Tuple
+    }
     
+    %% Relations (Internals)
+    Constraint <|-- ForeignKeyConstraint
+    Constraint <|-- CheckConstraint
+    Constraint <|-- UniqueConstraint
+    Constraint <|-- PrimaryKeyConstraint
+    ForeignKeyConstraint *-- IReferentialAction
+    IReferentialAction <|-- CascadeAction
+    IReferentialAction <|-- RestrictAction
+    IReferentialAction <|-- SetNullAction
+    IndexFactory --> Index
     Table *-- Column
     Table *-- Row
     Table *-- Constraint
     Table *-- Index
-    Table --> PartitionStrategy : delegates routing
+    Table --> PartitionStrategy
 ```
 
 ---
