@@ -22,7 +22,7 @@ This document outlines the core Design Patterns derived from the Feature Mindmap
 | **P2** | `IndexFactory` | **Factory Method** | DBMS supports different Index types (B-Tree, Hash). Core classes must not hardcode algorithm instantiation. | `idx = IndexFactory.create("BTREE")`<br>`idx.insert("alice", ptr) # Type-specific impl.` | Test `create("BTREE")` returns a B-Tree instance and `create("HASH")` a Hash instance. Test invalid types raise `ValueError`. |
 | **P2** | `PartitionStrategy` | **Strategy Pattern** | Row routing to physical partitions (by key range) must not clutter the main `Table.insert_row` logic with boundary conditions. | `partition_name = strategy.route_row(row.key)`<br>`# Table blindly delegates routing to Strategy` | Test exact boundary conditions (in-range returns partition name). Test out-of-range throws `PartitionNotFoundException`. Overlapping ranges throw `PartitionRangeOverlapException`. |
 | **P3** | `Sequence` | **State Pattern** | Auto-numbering (e.g. `AUTO_INCREMENT`) must maintain a thread-safe, in-memory counter that advances precisely. | `seq = Sequence("id_seq", start=1, increment=1)`<br>`seq.next_value() # → 1`<br>`seq.next_value() # → 2` | Test that `next_value()` advances by exactly `increment`. Test multiple calls return strictly sequential values with no skips. |
-| **P3** | `View` | **Proxy / Adapter** | A View hides multi-table JOINs behind a virtual table interface. Client queries `my_view` as if it were a real Table, unaware of the complexity. | `view = View("active_users", "SELECT * FROM users WHERE active=1")`<br>`result = view.resolve(schema) # Proxies query to Engine` | Test `resolve(schema)` returns compiled output. Test that a missing dependency table raises `DependencyViolationException`. |
+| **P3** | `View` | **Proxy (Virtual Proxy)** | A View hides multi-table JOINs behind a virtual table interface. Client queries `my_view` as if it were a real Table, unaware of the complexity. | `view = View("active_users", "SELECT * FROM users WHERE active=1")`<br>`result = view.resolve(schema) # Proxies query to Engine` | Test `resolve(schema)` returns compiled output. Test that a missing dependency table raises `DependencyViolationException`. |
 | **P3** | `StoredProcedure` | **Command Pattern** | Pre-packaged SQL logic must be callable without the client knowing the internals. The system only needs to trigger `execute()`. | `proc = StoredProcedure("clean_logs", body="DELETE...")`<br>`proc.execute(days=30) # Triggers encapsulated logic` | Test `execute(params)` delegates correctly. Test a missing required parameter raises `TypeError`. Test transaction failures propagate upward. |
 
 
@@ -127,12 +127,12 @@ sequenceDiagram
     Client->>TB: with_column("id", "int")
     TB->>Col: new Column("id", "int")
     Col-->>TB: Column instance
-    TB->>TB: Lưu Column vào self._columns[]
+    TB->>TB: Save Column into self._columns[]
     
     Client->>TB: build()
     TB->>Tbl: new Table("users")
-    TB->>Tbl: Đổ danh sách _columns vào Table
-    Tbl-->>TB: Table instance sạch sẽ
+    TB->>Tbl: Inject _columns list into Table
+    Tbl-->>TB: Clean Table instance
     TB-->>Client: return Table
     deactivate TB
 ```
@@ -152,7 +152,7 @@ sequenceDiagram
     SB->>TB: new TableBuilder("users")
     activate TB
     TB-->>SB: TableBuilder Reference
-    SB->>SB: Lưu TB vào self._table_builders[]
+    SB->>SB: Save TB into self._table_builders[]
     
     %% Triggers Fluent Chaining directly on the returned TB
     Client->>TB: with_column("id", "int")
@@ -160,13 +160,13 @@ sequenceDiagram
     Client->>SB: build()
     SB->>Sch: new Schema("public")
     
-    loop Dọn dẹp nhà thầu phụ
+    loop Process sub-builders
         SB->>TB: build()
         TB-->>SB: Table instance
         SB->>Sch: add_table(Table)
     end
     
-    Sch-->>SB: Schema instance hoàn mỹ
+    Sch-->>SB: Constructed Schema instance
     SB-->>Client: return Schema
     deactivate TB
     deactivate SB
@@ -212,17 +212,17 @@ sequenceDiagram
     Test->>Table: insert_row(row)
     activate Table
     
-    %% Tạo giỏ Parameter chứa cả row mồi, table hiện tại và schema tổng
+    %% Create Parameter Object wrapping candidate row, table, and schema
     Table->>Ctx: new ConstraintContext(row, table, schema)
     
     Table->>Val: validate(Ctx)
-    alt Xuyên biên giới an toàn
+    alt Validation Passes
         Val-->>Table: true
         Table->>Table: _rows.append(row)
         Table-->>Test: void
-    else Bị tóm cổ (Vi phạm)
+    else Constraint Violated
         Val-->>Table: throw ConstraintViolationException
-        Table-->>Test: throw Exception (Test đón lõng)
+        Table-->>Test: throw Exception (Caught by Test)
     end
     deactivate Table
 ```
@@ -235,24 +235,24 @@ sequenceDiagram
     participant Action as IReferentialAction (Strategy)
     participant ChildTable
     
-    %% Khi một hàng cha bị xóa đi
+    %% When a parent row is deleted
     Table->>FK: notify_parent_deleted(parent_row)
     activate FK
     FK->>Action: execute(parent_row, child_table)
     activate Action
     
-    %% Quyền sinh sát lúc này nằm trong tay Strategy
-    alt Strategy là Cascade
+    %% Execution delegated to Strategy
+    alt Strategy is Cascade
         Action->>ChildTable: delete_rows(foreign_key = target)
         ChildTable-->>Action: void
-    else Strategy là Restrict
+    else Strategy is Restrict
         Action-->>FK: throw ConstraintViolationException
-    else Strategy là SetNull
+    else Strategy is SetNull
         Action->>ChildTable: update_rows(foreign_key = target, NULL)
         ChildTable-->>Action: void
     end
     
-    Action-->>FK: báo cáo kết quả
+    Action-->>FK: return execution status
     deactivate Action
     FK-->>Table: void / Exception propagation
     deactivate FK
@@ -277,7 +277,7 @@ sequenceDiagram
     else invalid type
         Factory-->>Client: throw ValueError
     end
-    Factory-->>Client: return Index object (BTree/Hash giấu mặt)
+    Factory-->>Client: return Index object (BTree/Hash abstracted)
     deactivate Factory
 ```
 
@@ -289,21 +289,21 @@ sequenceDiagram
     participant PStrat as PartitionStrategy
     participant PartA as Table (Partition Q1)
     
-    %% Setup (Admin cấu hình trước)
+    %% Setup Range (Admin configures ahead)
     Client->>PStrat: add_range("Q1", "2023-01", "2023-03")
     
-    %% Insertion (Lúc đẩy data thật vào)
+    %% Insertion (Pushing actual data)
     Client->>Table: insert_row(row)
     activate Table
     Table->>PStrat: route_row(row.date)
     activate PStrat
     
-    alt Thuộc dải Q1
+    alt In range Q1
         PStrat-->>Table: return "Q1"
         Table->>PartA: insert_row(row)
-    else Thuộc dải dở dang / Không tìm thấy
+    else Out of bounds / Range not found
         PStrat-->>Table: throw PartitionNotFoundException
-        Table-->>Client: Nhè thẳng Exception ra bắt Client nhập lại
+        Table-->>Client: Throw Exception for Client to handle
     end
     deactivate PStrat
     
@@ -311,7 +311,98 @@ sequenceDiagram
     deactivate Table
 ```
 
-### 1.12. High-Level Class Diagram (Structural View)
+### 1.12. Sequence Diagram: State Pattern (Sequence Generator)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Seq as Sequence (State Holder)
+    participant RAM as Internal State (_current_value)
+    
+    %% Initialize initial state
+    Client->>Seq: new Sequence("id_seq", start=1, increment=1)
+    activate Seq
+    Seq->>RAM: Initialize _current_value = 1
+    Seq-->>Client: Return Sequence instance
+    deactivate Seq
+    
+    %% First fetch
+    Client->>Seq: next_value()
+    activate Seq
+    Seq->>RAM: current = _current_value (1)
+    Seq->>RAM: Push State: _current_value = current + increment (2)
+    Seq-->>Client: return 1
+    deactivate Seq
+    
+    %% Second fetch
+    Client->>Seq: next_value()
+    activate Seq
+    Seq->>RAM: current = _current_value (2)
+    Seq->>RAM: Push State: _current_value = current + increment (3)
+    Seq-->>Client: return 2
+    deactivate Seq
+```
+
+### 1.13. Sequence Diagram: Proxy Pattern (View)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Vw as View (Virtual Proxy)
+    participant Engine as Database Engine / Schema
+    
+    %% Phase 1: Hollow initialization (Store Metadata only, no physical Table access)
+    Client->>Vw: new View("active_users", "SELECT * FROM users")
+    activate Vw
+    Vw-->>Client: Return virtual View object 
+    deactivate Vw
+    
+    %% Phase 2: Trigger query (Proxy acts as Stand-in)
+    Client->>Vw: resolve(schema)
+    activate Vw
+    Vw->>Engine: Send "SELECT *..." to Engine
+    activate Engine
+    Engine->>Engine: Scan data from actual physical Tables
+    Engine-->>Vw: Return Raw Data
+    deactivate Engine
+    
+    Vw-->>Client: Return Data (Pretending the View fetched it)
+    deactivate Vw
+```
+
+### 1.14. Sequence Diagram: Command Pattern (Stored Procedure)
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Proc as StoredProcedure (Command)
+    participant Engine as Database Execute Engine
+    
+    %% Encapsulate logic into static form
+    Client->>Proc: new StoredProcedure("clean_logs", "DELETE FROM logs...")
+    activate Proc
+    Proc-->>Client: Return Command object (Not executed yet)
+    deactivate Proc
+    
+    %% Trigger command execution
+    Client->>Proc: execute(days=30)
+    activate Proc
+    Proc->>Engine: Unpack "DELETE FROM" with parameters
+    activate Engine
+    
+    %% Execute Engine handles 100% physical workload
+    Engine->>Engine: Check permissions, Compile, Delete physical Data
+    
+    alt SQL Logic Error / Transaction Fallback
+        Engine-->>Proc: throw QueryExecutionException
+        Proc-->>Client: Bubble up error to Client
+    else Execution Successful
+        Engine-->>Proc: return affected_rows_count
+        Proc-->>Client: Return output result
+    end
+    
+    deactivate Engine
+    deactivate Proc
+```
+
+### 1.15. High-Level Class Diagram (Structural View)
 ```mermaid
 classDiagram
     %% Core Singleton & Factories
