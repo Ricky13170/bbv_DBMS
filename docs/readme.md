@@ -84,7 +84,54 @@ obj2 = CatalogManager()
 print(obj1 is obj2) # True
 ```
 
-### 1.2. Sequence Diagram: Factory Method (DatabaseCatalog)
+### 1.2a. Class Diagram: Factory Method Pattern (DatabaseCatalog)
+```mermaid
+classDiagram
+    %% ----------------------------------------------------
+    %% FACTORY METHOD PATTERN (Áp dụng cho DatabaseCatalog)
+    %% ----------------------------------------------------
+
+    class QueryExecutor {
+        <<Client>>
+        +catalog: DatabaseCatalog
+        +run_sql_create_db(db_name: str)
+    }
+
+    class Creator {
+        <<Creator / Interface>>
+        +create_database(name: str)* Database
+    }
+
+    class DatabaseCatalog {
+        <<ConcreteCreator>>
+        -_databases: dict
+        +__init__()
+        +create_database(name: str) Database
+    }
+
+    class Product {
+        <<Product / Interface>>
+    }
+
+    class Database {
+        <<ConcreteProduct / Facade>>
+        +name: str
+        +__init__(name: str)
+        +create_schema(name: str)
+    }
+
+    %% Quan hệ Kế thừa (Realization)
+    Creator <|-- DatabaseCatalog : Implements
+    Product <|-- Database : Implements
+
+    %% Quan hệ Sinh ra (Dependency)
+    DatabaseCatalog ..> Database : Instantiates 
+    
+    %% Quan hệ Sử dụng (Association)
+    QueryExecutor --> Creator : Calls Factory Method
+```
+
+### 1.2b. Sequence Diagram: Factory Method (DatabaseCatalog)
 ```mermaid
 sequenceDiagram
     participant Client
@@ -105,6 +152,35 @@ sequenceDiagram
     deactivate DC
 ```
 
+**Implementation Example:**
+```python
+class Database:
+    def __init__(self, name:str):
+        self.name = name
+        
+class DatabaseCatalog:
+    def __init__(self):
+        self._databases = {}
+        
+    def create_database(self, name:str) -> Database:
+        new_db = Database(name)
+        self._databases[name] = new_db
+        return new_db
+        
+class QueryExecutor:
+    def __init__(self, catalog):
+        self.catalog = catalog
+    
+    def run_sql_create_db(self, db_name):
+        db = self.catalog.create_database(db_name)
+        print(f"Create database {db.name}")
+        
+catalog = DatabaseCatalog()
+executor = QueryExecutor(catalog)
+
+executor.run_sql_create_db("Shopee")
+```
+
 ### 1.3. Sequence Diagram: Facade Pattern (Database API)
 ```mermaid
 sequenceDiagram
@@ -121,6 +197,68 @@ sequenceDiagram
     CM-->>DB: Flag persist success
     DB-->>Client: void (Client is completely blind to CM or SB)
     deactivate DB
+```
+
+### 1.3a. Class Diagram: Facade Pattern (Database API)
+```mermaid
+classDiagram
+    %% ----------------------------------------------------
+    %% FACADE PATTERN (Áp dụng cho Database)
+    %% ----------------------------------------------------
+
+    class Client {
+    }
+
+    class Database {
+        <<Facade>>
+        +builder: SchemaBuilder
+        +catalog_manager: CatalogManager
+        +create_schema(schema_name: str)
+    }
+
+    class SchemaBuilder {
+        <<Subsystem>>
+        +build(name: str) dict
+    }
+
+    class CatalogManager {
+        <<Subsystem>>
+        +store_schema(schema_db: dict)
+    }
+
+    %% Client chỉ giao tiếp với Facade
+    Client --> Database : Gọi API Face đại diện
+
+    %% Facade điều phối các Subsystem phức tạp bên dưới
+    Database --> SchemaBuilder : Ủy quyền xây dựng
+    Database --> CatalogManager : Ủy quyền lưu trữ
+```
+
+**Implementation Example:**
+```python
+class SchemaBuilder:
+    def build(self, name: str):
+        return {'name': name, "tables": []}
+        
+class CatalogManager:
+    def store_schema(self, schema_db):
+        print(f"CatalogManager write schema '{schema_db['name']}'")
+
+class Database:
+    def __init__(self, db_name: str):
+        self.name = db_name
+        self.builder = SchemaBuilder()
+        self.catalog_manager = CatalogManager()
+    
+    def create_schema(self, schema_name: str):
+        new_schema = self.builder.build(schema_name)
+        self.catalog_manager.store_schema(new_schema)
+        print("Done")
+
+# --- Client execute ---
+db = Database("ShopeeDB")
+db.create_schema("public")
+db.create_schema("auth service")
 ```
 
 ### 1.4. Sequence Diagram: Composite Pattern (Schema Drop)
