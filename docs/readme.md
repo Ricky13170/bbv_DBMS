@@ -401,6 +401,81 @@ sequenceDiagram
     deactivate TB
 ```
 
+### 1.5a. Class Diagram: Builder Pattern (Table Creation)
+```mermaid
+classDiagram
+    %% ----------------------------------------------------
+    %% BUILDER PATTERN (Applied to Table)
+    %% ----------------------------------------------------
+
+    class Client {
+    }
+
+    class TableBuilder {
+        <<Builder>>
+        +table_name: str
+        +with_column(name: str, data_type: str) TableBuilder
+        +with_int_column(name: str) TableBuilder
+        +with_string_column(name: str) TableBuilder
+        +build() Table
+    }
+
+    class Table {
+        <<Product>>
+        -_columns: List~Column~
+        -_rows: List~Row~
+        -_constraints: List~Constraint~
+        -_indexes: List~Index~
+        +add_column(column: Column)
+        +add_constraint(constraint: Constraint)
+        +add_index(index: Index)
+    }
+
+    %% Client directs the construction process step-by-step
+    Client --> TableBuilder : Configures & calls build()
+
+    %% Builder instantiates the complex product
+    TableBuilder ..> Table : Creates & returns
+```
+
+**Implementation Example:**
+```python
+class Table:
+    def __init__(self, name: str):
+        self.name = name
+        self._columns = []
+
+class TableBuilder:
+    def __init__(self, table_name: str):
+        self.table_name = table_name
+        self._columns_to_build = []
+
+    def with_column(self, name: str, data_type: str) -> 'TableBuilder':
+        self._columns_to_build.append((name, data_type))
+        return self 
+
+    def with_int_column(self, name: str) -> 'TableBuilder':
+        return self.with_column(name, "int")
+
+    def with_string_column(self, name: str) -> 'TableBuilder':
+        return self.with_column(name, "string")
+
+    def build(self) -> Table:
+        new_table = Table(self.table_name)
+        for col_name, col_type in self._columns_to_build:
+            new_table._columns.append({col_name: col_type})
+            print(f"  [+] Added '{col_name}' ({col_type}) to Table '{self.table_name}'")
+        return new_table
+
+# --- Client Execution ---
+builder = TableBuilder("users")
+tb_users = (builder
+            .with_int_column("id")
+            .with_string_column("username")
+            .with_string_column("email")
+            .build())
+```
+
 ### 1.6. Sequence Diagram: Builder Pattern (SchemaBuilder)
 ```mermaid
 sequenceDiagram
@@ -434,6 +509,88 @@ sequenceDiagram
     SB-->>Client: return Schema
     deactivate TB
     deactivate SB
+```
+
+### 1.6a. Class Diagram: Builder Pattern (SchemaBuilder)
+```mermaid
+classDiagram
+    %% ----------------------------------------------------
+    %% BUILDER PATTERN (Applied to Schema)
+    %% ----------------------------------------------------
+
+    class Client {
+        %% Acts as Director in this context
+    }
+
+    class SchemaBuilder {
+        <<ConcreteBuilder>>
+        +name: str
+        -_table_builders: List~TableBuilder~
+        +with_table(table_name: str) TableBuilder
+        +build() Schema
+    }
+
+    class Schema {
+        <<Product>>
+        +owner: str
+        -_tables: List~Table~
+        -_views: List~View~
+        -_sequences: List~Sequence~
+        -_procedures: List~StoredProcedure~
+        +add_table(table: Table)
+    }
+
+    class TableBuilder {
+        <<Helper Builder>>
+        +build() Table
+    }
+
+    %% Client directs the SchemaBuilder
+    Client --> SchemaBuilder : Configures & calls build()
+
+    %% SchemaBuilder manages subordinate TableBuilders
+    SchemaBuilder *-- TableBuilder : Orchestrates
+
+    %% SchemaBuilder constructs the final Schema
+    SchemaBuilder ..> Schema : Creates & returns
+```
+
+**Implementation Example:**
+```python
+class SchemaBuilder:
+    def __init__(self, name: str):
+        self.name = name
+        self._table_builders = []
+
+    def with_table(self, table_name: str) -> TableBuilder:
+        tb = TableBuilder(table_name)
+        self._table_builders.append(tb)
+        return tb
+
+    def build(self) -> Schema:
+        print(f"--- Building Schema '{self.name}' ---")
+        new_schema = Schema(self.name)
+        
+        # Trigger build() on all saved TableBuilders
+        for tb in self._table_builders:
+            built_table = tb.build()
+            new_schema.add_table(built_table)
+            
+        print(f"--- Schema '{self.name}' built successfully! ---")
+        return new_schema
+
+# --- Client Execution (Acts as Director) ---
+schema_builder = SchemaBuilder("public")
+
+(schema_builder.with_table("users")
+    .with_int_column("id")
+    .with_string_column("username"))
+
+(schema_builder.with_table("orders")
+    .with_int_column("id")
+    .with_string_column("total_amount"))
+
+final_schema = schema_builder.build()
 ```
 
 ### 1.7. Sequence Diagram: Value Object (Row / Column Immutability)
