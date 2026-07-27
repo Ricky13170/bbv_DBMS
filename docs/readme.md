@@ -88,55 +88,57 @@ print(obj1 is obj2) # True
 ```mermaid
 classDiagram
     %% ----------------------------------------------------
-    %% FACTORY METHOD PATTERN (Áp dụng cho DatabaseCatalog)
+    %% FACTORY METHOD PATTERN (Strict GoF version)
     %% ----------------------------------------------------
 
     class QueryExecutor {
         <<Client>>
-        +catalog: DatabaseCatalog
+        +catalog: IDatabaseCatalog
         +run_sql_create_db(db_name: str)
     }
 
-    class Creator {
+    class IDatabaseCatalog {
         <<Creator / Interface>>
-        +create_database(name: str)* Database
+        +create_database(name: str)* IDatabase
     }
 
-    class DatabaseCatalog {
+    class RelationalDatabaseCatalog {
         <<ConcreteCreator>>
         -_databases: dict
         +__init__()
-        +create_database(name: str) Database
+        +create_database(name: str) IDatabase
     }
 
-    class Product {
+    class IDatabase {
         <<Product / Interface>>
-    }
-
-    class Database {
-        <<ConcreteProduct / Facade>>
         +name: str
-        +__init__(name: str)
-        +create_schema(name: str)
+        +create_schema(schema_name: str)*
     }
 
-    %% Quan hệ Kế thừa (Realization)
-    Creator <|-- DatabaseCatalog : Implements
-    Product <|-- Database : Implements
+    class RelationalDatabase {
+        <<ConcreteProduct>>
+        -_catalog: CatalogManager
+        +__init__(name: str)
+        +create_schema(schema_name: str)
+    }
+
+    %% Kế thừa (Realization)
+    IDatabaseCatalog <|-- RelationalDatabaseCatalog : Implements
+    IDatabase <|-- RelationalDatabase : Implements
 
     %% Quan hệ Sinh ra (Dependency)
-    DatabaseCatalog ..> Database : Instantiates 
+    RelationalDatabaseCatalog ..> RelationalDatabase : Instantiates 
     
     %% Quan hệ Sử dụng (Association)
-    QueryExecutor --> Creator : Calls Factory Method
+    QueryExecutor --> IDatabaseCatalog : Calls Factory Method
 ```
 
 ### 1.2b. Sequence Diagram: Factory Method (DatabaseCatalog)
 ```mermaid
 sequenceDiagram
     participant Client
-    participant DC as DatabaseCatalog (Factory)
-    participant DB as Database (Facade)
+    participant DC as RelationalDatabaseCatalog (ConcreteCreator)
+    participant DB as RelationalDatabase (ConcreteProduct)
 
     Client->>DC: create_database("ecommerce")
     activate DC
@@ -144,40 +146,51 @@ sequenceDiagram
     alt Name Already Exists
         DC-->>Client: throw DatabaseExistsException
     else Valid Name
-        DC->>DB: new Database("ecommerce")
-        DB-->>DC: Database instance
+        DC->>DB: new RelationalDatabase("ecommerce")
+        DB-->>DC: RelationalDatabase instance
         DC->>DC: Register db into _databases{}
-        DC-->>Client: return Database object
+        DC-->>Client: return IDatabase (Product Interface)
     end
     deactivate DC
 ```
 
 **Implementation Example:**
 ```python
-class Database:
+from abc import ABC, abstractmethod
+
+class IDatabase(ABC):
+    @abstractmethod
+    def create_schema(self, schema_name: str) -> None: pass
+
+class RelationalDatabase(IDatabase):
     def __init__(self, name:str):
         self.name = name
+    def create_schema(self, schema_name: str) -> None:
+        pass
         
-class DatabaseCatalog:
+class IDatabaseCatalog(ABC):
+    @abstractmethod
+    def create_database(self, name: str) -> IDatabase: pass
+
+class RelationalDatabaseCatalog(IDatabaseCatalog):
     def __init__(self):
         self._databases = {}
         
-    def create_database(self, name:str) -> Database:
-        new_db = Database(name)
+    def create_database(self, name:str) -> IDatabase:
+        new_db = RelationalDatabase(name)
         self._databases[name] = new_db
         return new_db
         
 class QueryExecutor:
-    def __init__(self, catalog):
+    def __init__(self, catalog: IDatabaseCatalog):
         self.catalog = catalog
     
     def run_sql_create_db(self, db_name):
-        db = self.catalog.create_database(db_name)
-        print(f"Create database {db.name}")
+        db: IDatabase = self.catalog.create_database(db_name)
+        print(f"Created database instance '{db.name}' successfully")
         
-catalog = DatabaseCatalog()
+catalog = RelationalDatabaseCatalog()
 executor = QueryExecutor(catalog)
-
 executor.run_sql_create_db("Shopee")
 ```
 

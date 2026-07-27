@@ -1,16 +1,16 @@
 import pytest
-from src.database_objects.database_catalog import DatabaseCatalog, DatabaseExistsException, DatabaseNotFoundException
+from src.database_objects.database_catalog import RelationalDatabaseCatalog, DatabaseExistsException, DatabaseNotFoundException
 
 class TestDatabaseCatalog:
     def setup_method(self):
-        self.catalog = DatabaseCatalog()
+        self.catalog = RelationalDatabaseCatalog()
 
     def test_CreateDatabase_WithValidName_ShouldReturnDatabaseInstance(self):
-        from src.database_objects.database import Database
+        from src.database_objects.database import IDatabase
         db = self.catalog.create_database("Tiki")
         assert db is not None
         assert db.name == "Tiki"
-        assert isinstance(db, Database)
+        assert isinstance(db, IDatabase)
 
     def test_CreateDatabase_WithDuplicateName_ShouldRaiseException(self):
         self.catalog.create_database("Tiki")
