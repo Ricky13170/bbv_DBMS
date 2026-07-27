@@ -261,11 +261,11 @@ class Database:
     def __init__(self, db_name: str):
         self.name = db_name
         self.catalog_manager = CatalogManager()
+        self.schema_builder = SchemaBuilder()
     
     def create_schema(self, schema_name: str):
-        # Instantiate SchemaBuilder inside the method to match Sequence Diagram 1.3
-        new_schema = SchemaBuilder().build(schema_name)
-        self.catalog_manager.store_schema(new_schema)
+        schema = self.schema_builder.build(schema_name)
+        self.catalog_manager.store_schema(schema)
         print("Done")
 
 # --- Client Execution ---
@@ -489,6 +489,108 @@ tb_users = (builder
             .build())
 ```
 
+### 1.5b. Class Diagram: Builder Pattern (Theoretical GoF Structure)
+```mermaid
+classDiagram
+    %% ----------------------------------------------------
+    %% BUILDER PATTERN (Strict GoF version for comparison)
+    %% ----------------------------------------------------
+
+    class Client {
+    }
+
+    class TableDirector {
+        <<Director>>
+        +builder: ITableBuilder
+        +construct_user_table() Table
+    }
+
+    class ITableBuilder {
+        <<Builder / Interface>>
+        +set_table_name(name: str)*
+        +add_int_column(name: str)*
+        +add_string_column(name: str)*
+        +build() Table*
+    }
+
+    class RelationalTableBuilder {
+        <<ConcreteBuilder>>
+        -_table: Table
+        +set_table_name(name: str)
+        +add_int_column(name: str)
+        +add_string_column(name: str)
+        +build() Table
+    }
+
+    class Table {
+        <<Product>>
+        +name: str
+        +columns: List
+    }
+
+    %% Relationships
+    TableDirector o--> ITableBuilder : Uses
+    Client --> TableDirector : Initiates build()
+    Client --> RelationalTableBuilder : Injects into Director
+    ITableBuilder <|-- RelationalTableBuilder : Implements
+    RelationalTableBuilder ..> Table : Creates
+```
+
+**Implementation Example:**
+```python
+from abc import ABC, abstractmethod
+
+# 1. Product
+class Table:
+    def __init__(self, name):
+        self.name = name
+        self.columns = []
+
+# 2. Builder (Interface)
+class ITableBuilder(ABC):
+    @abstractmethod
+    def set_table_name(self, name: str): pass
+    @abstractmethod
+    def add_int_column(self, name: str): pass
+    @abstractmethod
+    def add_string_column(self, name: str): pass
+    @abstractmethod
+    def build(self) -> Table: pass
+
+# 3. ConcreteBuilder
+class RelationalTableBuilder(ITableBuilder):
+    def __init__(self):
+        self._table = None
+        
+    def set_table_name(self, name: str):
+        self._table = Table(name)
+        
+    def add_int_column(self, name: str):
+        self._table.columns.append({name: 'int'})
+        
+    def add_string_column(self, name: str):
+        self._table.columns.append({name: 'string'})
+        
+    def build(self) -> Table:
+        return self._table
+
+# 4. Director
+class TableDirector:
+    def __init__(self, builder: ITableBuilder):
+        self.builder = builder
+        
+    def construct_user_table(self) -> Table:
+        self.builder.set_table_name("users")
+        self.builder.add_int_column("id")
+        self.builder.add_string_column("username")
+        return self.builder.build()
+
+# --- Client Execution ---
+builder = RelationalTableBuilder()
+director = TableDirector(builder)
+tb_users = director.construct_user_table() 
+```
+
 ### 1.6. Sequence Diagram: Builder Pattern (SchemaBuilder)
 ```mermaid
 sequenceDiagram
@@ -604,6 +706,109 @@ schema_builder = SchemaBuilder("public")
     .with_string_column("total_amount"))
 
 final_schema = schema_builder.build()
+```
+
+### 1.6b. Class Diagram: Builder Pattern (SchemaBuilder) (GoF Structure)
+```mermaid
+classDiagram
+    %% ----------------------------------------------------
+    %% BUILDER PATTERN (Strict GoF version for Schema)
+    %% ----------------------------------------------------
+
+    class Client {
+    }
+
+    class SchemaDirector {
+        <<Director>>
+        +builder: ISchemaBuilder
+        +construct_default_auth_schema() Schema
+    }
+
+    class ISchemaBuilder {
+        <<Builder / Interface>>
+        +set_schema_name(name: str)*
+        +add_table(table_name: str, cols: list)*
+        +build() Schema*
+    }
+
+    class SchemaBuilder {
+        <<ConcreteBuilder>>
+        -_schema: Schema
+        +__init__()
+        +set_schema_name(name: str)
+        +add_table(table_name: str, cols: list)
+        +build() Schema
+    }
+
+    class Schema {
+        <<Product>>
+        +name: str
+        +tables: List
+    }
+
+    %% Relationships
+    SchemaDirector o--> ISchemaBuilder : Uses
+    Client --> SchemaDirector : Initiates build()
+    Client --> SchemaBuilder : Injects into Director
+    ISchemaBuilder <|-- SchemaBuilder : Implements
+    SchemaBuilder ..> Schema : Creates
+```
+
+**Implementation Example:**
+```python
+from abc import ABC, abstractmethod
+
+class Schema:
+    def __init__(self, name:str):
+        self.name = name
+        self.tables = []
+        
+class ISchemaBuilder(ABC):
+    @abstractmethod
+    def set_schema_name(self, name: str):
+        pass
+    
+    @abstractmethod
+    def add_table(self, table_name: str, cols: list):
+        pass
+    
+    @abstractmethod
+    def build(self) -> Schema:
+        pass
+    
+class SchemaBuilder(ISchemaBuilder):
+    def __init__(self):
+        self._schema = None
+    
+    def set_schema_name(self, name: str):
+        self._schema = Schema(name)
+        
+    def add_table(self, table_name: str, cols: list):
+        self._schema.tables.append({"table": table_name, "cols": cols})
+        
+    def build(self) -> Schema:
+        return self._schema
+        
+class SchemaDirector:
+    def __init__(self, builder: ISchemaBuilder):
+        self._builder = builder
+        
+    def construct_default_auth_schema(self) -> Schema:
+        self._builder.set_schema_name("auth_service")
+        
+        self._builder.add_table("user", ["id", "username", "password"])
+        self._builder.add_table("roles", ["id", "username", "password"])
+        self._builder.add_table("user_roles", ["user_id", "role_id"])
+        
+        return self._builder.build()
+        
+    
+builder = SchemaBuilder()
+director = SchemaDirector(builder)
+
+auth_schema = director.construct_default_auth_schema()
+
+print(f"Finish Schema: {auth_schema.name}")
 ```
 
 ### 1.7. Sequence Diagram: Value Object (Row / Column Immutability)
