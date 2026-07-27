@@ -811,35 +811,7 @@ auth_schema = director.construct_default_auth_schema()
 print(f"Finish Schema: {auth_schema.name}")
 ```
 
-### 1.7. Sequence Diagram: Value Object (Row / Column Immutability)
-```mermaid
-sequenceDiagram
-    participant Client
-    participant VO as Row / Column (Value Object)
-    participant RAM as Internal State (Tuple)
-
-    %% Flow 1: Creation and Type Enforcement 
-    Client->>VO: new Row([1, "Alice"])
-    activate VO
-    VO->>RAM: Encapsulate as read-only Tuple
-    VO-->>Client: instance
-    deactivate VO
-    
-    %% Flow 2: Attempting Dirty Write Mutation
-    Client-xVO: row._values[0] = 5
-    activate VO
-    VO-->>Client: Throw TypeError / AttributeError
-    deactivate VO
-    
-    %% Flow 3: Value Equality Comparison
-    Client->>VO: __eq__(other_row)
-    activate VO
-    VO->>RAM: Self.Tuple == Other.Tuple
-    RAM-->>VO: compare data purely
-    VO-->>Client: return boolean
-    deactivate VO
-```
-### 1.8. Sequence Diagram: Strategy Pattern (Constraint)
+### 1.7. Sequence Diagram: Strategy Pattern (Constraint)
 ```mermaid
 sequenceDiagram
     participant Test as Unit Test
