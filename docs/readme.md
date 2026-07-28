@@ -14,8 +14,6 @@ This document outlines the core Design Patterns derived from the Feature Mindmap
 | **P1** | `Schema`, `DatabaseObject` | **Composite Pattern** | A Schema contains Tables, Views, Sequences. Drop operations must propagate uniformly without type-checking each child. | `schema.drop()`<br>`# Internally calls .drop() on ALL children,`<br>`# regardless of whether they are Table or View` | Test that `add_table()`, `add_view()`, and `add_sequence()` are accepted uniformly. Test `drop()` cascades without errors. |
 | **P1** | `SchemaBuilder` | **Builder Pattern** | Constructing a full Schema requires complex Setup. Fluent Builder abstraction removes structural noise. | `schema = SchemaBuilder("db")`<br>`.with_table("users").build()` | Test fluent chaining builds a valid Schema tree. Test missing fields raise `ValueError`. |
 | **P1** | `TableBuilder` | **Builder Pattern** | Initializing a Table with dozens of Columns/Constraints manually causes bloated constructors. | `table = TableBuilder("users")`<br>`.with_column("id", "int").build()` | Test fluent column accumulation. Test duplicate columns raise Exceptions. |
-| **P1** | `Column` | **Value Object** | Once a column is defined (name + type), it must not mutate. Immutability prevents inconsistent schema drift at runtime. | `col = Column("id", "int")`<br>`col.name = "x" # Raises AttributeError`<br>`Column("id","int") == Column("id","int") # True` | Test that post-creation mutation raises `AttributeError`. Test that two columns with equal fields are equal via `__eq__`. |
-| **P1** | `Row` | **Value Object** | A Row is a snapshot of data at insert-time. Mutable rows cause dirty reads in concurrent environments. | `r1 = Row((1, "Alice"))`<br>`r1.values[0] = 99 # Raises TypeError`<br>`Row((1,"A")) == Row((1,"A")) # True` | Test that all values are wrapped in an immutable tuple. Test equality is value-based, not reference-based. |
 | **P1** | `Constraint` | **Strategy Pattern** | Validation logic (Check, Unique, Not Null) embedded inside `Table.insert_row` creates unreadable bloat. Strategy externalizes each rule as a swappable object. | `unique_validator.validate(ctx)`<br>`# Table loops validators without knowing their type` | Test each strategy independently with mock contexts. Test `ConstraintViolationException` for a bad row, and `True` for a valid one. |
 | **P1** | `ConstraintContext` | **Parameter Object** | Passing `row, table, schema` as separate arguments to every validator bloats method signatures. One immutable envelope bundles all state. | `ctx = ConstraintContext(row, table)`<br>`validator.validate(ctx) # Single clean argument` | Test that the context binds references to Table and Row without mutating their internal state. |
 | **P2** | `ForeignKeyConstraint`, `IReferentialAction` | **Strategy Pattern** | Hardcoding `CASCADE` or `RESTRICT` inside Table classes creates spaghetti. Injecting strategies allows dynamic FK behavior at creation time. | `fk = ForeignKeyConstraint("user_id",`<br>`    on_delete=CascadeAction())`<br>`# Deleting parent → auto cascade to child` | Create mock `CascadeAction` and `RestrictAction`. Test parent deletion correctly triggers child cascade or exception. |
@@ -811,34 +809,182 @@ auth_schema = director.construct_default_auth_schema()
 print(f"Finish Schema: {auth_schema.name}")
 ```
 
-### 1.7. Sequence Diagram: Strategy Pattern (Constraint)
+### 1.7. Strategy Pattern (Constraint Validation)
 ```mermaid
-sequenceDiagram
-    participant Test as Unit Test
-    participant Table
-    participant Val as Constraint (Strategy)
-    participant Ctx as ConstraintContext (Parameter Object)
-    
-    Test->>Table: add_constraint(Val)
-    Test->>Table: insert_row(row)
-    activate Table
-    
-    %% Create Parameter Object wrapping candidate row, table, and schema
-    Table->>Ctx: new ConstraintContext(row, table, schema)
-    
-    Table->>Val: validate(Ctx)
-    alt Validation Passes
-        Val-->>Table: true
-        Table->>Table: _rows.append(row)
-        Table-->>Test: void
-    else Constraint Violated
-        Val-->>Table: throw ConstraintViolationException
-        Table-->>Test: throw Exception (Caught by Test)
-    end
-    deactivate Table
+classDiagram
+    %% ----------------------------------------------------
+    %% STRATEGY PATTERN (Constraint Validation)
+    %% ----------------------------------------------------
+
+    class Table {
+        <<Context>>
+        -constraints: List~Constraint~
+        +add_constraint(c: Constraint)
+        +insert_row(row: Row)
+    }
+
+    class Constraint {
+        <<Strategy / Interface>>
+        +name: str
+        +is_enabled: bool
+        +validate(ctx: ConstraintContext) bool
+        #_check(ctx: ConstraintContext)* bool
+    }
+
+    class CheckConstraint {
+        <<ConcreteStrategy>>
+        +predicate: Callable
+        #_check(ctx: ConstraintContext) bool
+    }
+
+    class UniqueConstraint {
+        <<ConcreteStrategy>>
+        +columns: List~str~
+        #_check(ctx: ConstraintContext) bool
+    }
+
+    class ConstraintContext {
+        <<ParameterObject>>
+        +candidate_row: Row
+        +table: Table
+    }
+
+    %% Relationships
+    Table o--> Constraint : Maintains list of strategies
+    Constraint <|-- CheckConstraint : Implements _check
+    Constraint <|-- UniqueConstraint : Implements _check
+    Constraint ..> ConstraintContext : Uses for evaluation
 ```
 
-### 1.9. Sequence Diagram: Strategy Pattern (Referential Integrity)
+**Sequence Diagram:**
+```mermaid
+sequenceDiagram
+    participant Table
+    participant Val as Constraint (Strategy)
+    participant Ctx as ConstraintContext
+    
+    Table->>Ctx: new ConstraintContext(new_row, self)
+    loop For each stored Constraint
+        Table->>Val: validate(ctx)
+        activate Val
+        alt is_enabled == True
+            Val->>Val: _check(ctx) [Strategy Logic Execute]
+            alt Violation
+                Val-->>Table: throw ConstraintViolationException
+            else Success
+                Val-->>Table: return True
+            end
+        end
+        deactivate Val
+    end
+```
+
+**Implementation Example:**
+```python
+from abc import ABC, abstractmethod
+
+# 1. Parameter Object
+class ConstraintContext:
+    def __init__(self, row, table):
+        self.row = row
+        self.table = table
+
+# 2. Strategy Interface
+class Constraint(ABC):
+    def __init__(self, name: str):
+        self.name = name
+        self.is_enabled = True
+        
+    def validate(self, ctx: ConstraintContext) -> bool:
+        if not self.is_enabled: return True
+        return self._check(ctx)
+        
+    @abstractmethod
+    def _check(self, ctx: ConstraintContext) -> bool:
+        pass
+
+# 3. Concrete Strategies
+class CheckConstraint(Constraint):
+    def __init__(self, name: str, predicate):
+        super().__init__(name)
+        self.predicate = predicate
+        
+    def _check(self, ctx: ConstraintContext) -> bool:
+        if not self.predicate(ctx.row):
+            raise Exception(f"CheckConstraint '{self.name}' violated!")
+        return True
+
+class UniqueConstraint(Constraint):
+    def __init__(self, name: str):
+        super().__init__(name)
+        
+    def _check(self, ctx: ConstraintContext) -> bool:
+        return True
+
+# 4. Context
+class Table:
+    def __init__(self):
+        self.constraints = []
+        
+    def add_constraint(self, c: Constraint):
+        self.constraints.append(c)
+        
+    def insert_row(self, row):
+        ctx = ConstraintContext(row, self)
+        for c in self.constraints:
+            c.validate(ctx)  
+        print("Row inserted successfully!")
+
+# --- Client Execution ---
+t = Table()
+t.add_constraint(CheckConstraint("age_over_18", lambda r: r['age'] >= 18))
+t.add_constraint(UniqueConstraint("unique_email"))
+
+t.insert_row({'age': 20, 'email': 'test@ok.com'}) 
+```
+
+### 1.8. Strategy Pattern (Referential Integrity / Foreign Key Action)
+```mermaid
+classDiagram
+    %% ----------------------------------------------------
+    %% STRATEGY PATTERN (Strict GoF version for FK Actions)
+    %% ----------------------------------------------------
+
+    class ForeignKeyConstraint {
+        <<Context>>
+        -on_delete: IReferentialAction
+        +__init__(on_delete: IReferentialAction)
+        +on_parent_row_deleted()
+    }
+
+    class IReferentialAction {
+        <<Strategy / Interface>>
+        +execute(parent_row: Row, child_table: Table)*
+    }
+
+    class CascadeAction {
+        <<ConcreteStrategy>>
+        +execute(parent_row: Row, child_table: Table)
+    }
+
+    class RestrictAction {
+        <<ConcreteStrategy>>
+        +execute(parent_row: Row, child_table: Table)
+    }
+
+    class SetNullAction {
+        <<ConcreteStrategy>>
+        +execute(parent_row: Row, child_table: Table)
+    }
+
+    %% Relationships
+    ForeignKeyConstraint o--> IReferentialAction : Maintains reference
+    IReferentialAction <|-- CascadeAction : Implements
+    IReferentialAction <|-- RestrictAction : Implements
+    IReferentialAction <|-- SetNullAction : Implements
+```
+
+**Sequence Diagram:**
 ```mermaid
 sequenceDiagram
     participant Table
@@ -846,27 +992,71 @@ sequenceDiagram
     participant Action as IReferentialAction (Strategy)
     participant ChildTable
     
-    %% When a parent row is deleted
     Table->>FK: notify_parent_deleted(parent_row)
     activate FK
     FK->>Action: execute(parent_row, child_table)
     activate Action
     
-    %% Execution delegated to Strategy
     alt Strategy is Cascade
         Action->>ChildTable: delete_rows(foreign_key = target)
-        ChildTable-->>Action: void
     else Strategy is Restrict
-        Action-->>FK: throw ConstraintViolationException
+        Action-->>FK: throw RestrictViolationException
     else Strategy is SetNull
         Action->>ChildTable: update_rows(foreign_key = target, NULL)
-        ChildTable-->>Action: void
     end
     
-    Action-->>FK: return execution status
+    Action-->>FK: return status
     deactivate Action
-    FK-->>Table: void / Exception propagation
     deactivate FK
+```
+
+**Implementation Example:**
+```python
+from abc import ABC, abstractmethod
+
+# Strategy Interface
+class IReferentialAction(ABC):
+    @abstractmethod
+    def execute(self, parent_row, child_table) -> None:
+        pass
+
+# Concrete Strategies
+class CascadeAction(IReferentialAction):
+    def execute(self, parent_row, child_table) -> None:
+        print(f"[Cascade] Automatically deleting child rows referencing parent ID: {parent_row['id']}")
+
+class RestrictAction(IReferentialAction):
+    def execute(self, parent_row, child_table) -> None:
+        print(f"[Restrict] ABORT! Cannot delete parent ID {parent_row['id']} because child records exist.")
+        raise Exception("Restrict Violation")
+
+class SetNullAction(IReferentialAction):
+    def execute(self, parent_row, child_table) -> None:
+        print(f"[SetNull] Updating child rows referencing {parent_row['id']} to NULL.")
+
+# Context
+class ForeignKeyConstraint:
+    def __init__(self, name: str, on_delete: IReferentialAction):
+        self.name = name
+        self.on_delete = on_delete 
+        
+    def on_parent_row_deleted(self, parent_row, child_table):
+        self.on_delete.execute(parent_row, child_table)
+
+# CLIENT
+parent_data = {"id": 42}
+child_table_ref = "orders_table"
+
+print("--- Scenario A: Client configures Cascade ---")
+fk_cascade = ForeignKeyConstraint("fk_user_id", on_delete=CascadeAction())
+fk_cascade.on_parent_row_deleted(parent_data, child_table_ref)
+
+print("\n--- Scenario B: Client configures Restrict ---")
+fk_restrict = ForeignKeyConstraint("fk_user_id", on_delete=RestrictAction())
+try:
+    fk_restrict.on_parent_row_deleted(parent_data, child_table_ref)
+except Exception as e:
+    print(f"Caught Exception: {e}")
 ```
 
 ### 1.10. Sequence Diagram: Factory Method (IndexFactory)
