@@ -1112,95 +1112,422 @@ sequenceDiagram
     deactivate Table
 ```
 
-### 1.12. Sequence Diagram: State Pattern (Sequence Generator)
+### 1.12. State Pattern (Sequence Generator)
+```mermaid
+classDiagram
+    %% ----------------------------------------------------
+    %% STATE PATTERN (Sequence Generator)
+    %% ----------------------------------------------------
+    class Sequence {
+        <<Context>>
+        +name: str
+        +start: int
+        +increment: int
+        +max_value: int
+        -_current_value: int
+        -_state: ISequenceState
+        +set_state(state: ISequenceState)
+        +next_value() int
+    }
+
+    class ISequenceState {
+        <<State / Interface>>
+        +next_value(seq: Sequence)* int
+    }
+
+    class ActiveState {
+        <<ConcreteState>>
+        +next_value(seq: Sequence) int
+    }
+
+    class ExhaustedState {
+        <<ConcreteState>>
+        +next_value(seq: Sequence) int
+    }
+
+    Sequence o--> ISequenceState : Maintains current state
+    ISequenceState <|-- ActiveState : Implements 
+    ISequenceState <|-- ExhaustedState : Implements
+    ActiveState ..> ExhaustedState : Transitions to when max reached
+    Sequence --> ActiveState : Initial state
+```
+
+**Sequence Diagram:**
 ```mermaid
 sequenceDiagram
     participant Client
-    participant Seq as Sequence (State Holder)
-    participant RAM as Internal State (_current_value)
+    participant Seq as Sequence (Context)
+    participant Act as ActiveState
+    participant Exh as ExhaustedState
     
-    %% Initialize initial state
-    Client->>Seq: new Sequence("id_seq", start=1, increment=1)
-    activate Seq
-    Seq->>RAM: Initialize _current_value = 1
-    Seq-->>Client: Return Sequence instance
-    deactivate Seq
-    
-    %% First fetch
+    %% First fetch (Active)
     Client->>Seq: next_value()
     activate Seq
-    Seq->>RAM: current = _current_value (1)
-    Seq->>RAM: Push State: _current_value = current + increment (2)
+    Seq->>Act: next_value(self)
+    activate Act
+    Act->>Act: Calculate next = current + increment
+    Act-->>Seq: return current_value (1)
+    deactivate Act
     Seq-->>Client: return 1
     deactivate Seq
     
-    %% Second fetch
+    %% Next fetch (Transitions to Exhausted)
     Client->>Seq: next_value()
     activate Seq
-    Seq->>RAM: current = _current_value (2)
-    Seq->>RAM: Push State: _current_value = current + increment (3)
+    Seq->>Act: next_value(self)
+    activate Act
+    Act->>Act: Calculate next = current + increment
+    alt next_val > max_value
+        Act->>Seq: set_state(new ExhaustedState())
+    end
+    Act-->>Seq: return current_value (2)
+    deactivate Act
     Seq-->>Client: return 2
+    deactivate Seq
+
+    %% Third fetch (Now it's Exhausted!)
+    Client->>Seq: next_value()
+    activate Seq
+    Seq->>Exh: next_value(self)  %% Blindly delegates to current state
+    activate Exh
+    Exh-->>Seq: throw SequenceExhaustedException
+    deactivate Exh
+    Seq-->>Client: throw SequenceExhaustedException
     deactivate Seq
 ```
 
-### 1.13. Sequence Diagram: Proxy Pattern (View)
+**Implementation Example:**
+```python
+from abc import ABC, abstractmethod
+
+# State Interface
+class ISequenceState(ABC):
+    @abstractmethod
+    def next_value(self, sequence: 'Sequence') -> int:
+        pass
+
+# Concrete States
+class ActiveState(ISequenceState):
+    def next_value(self, sequence: 'Sequence') -> int:
+        current = sequence._current_value
+        next_val = current + sequence.increment
+        
+        # Transition Logic
+        if next_val > sequence.max_value:
+            print(">> [State Transition] Active -> Exhausted")
+            sequence.set_state(ExhaustedState())
+            
+        sequence._current_value = next_val
+        return current
+
+class ExhaustedState(ISequenceState):
+    def next_value(self, sequence: 'Sequence') -> int:
+        raise Exception(f"Sequence '{sequence.name}' has exhausted its capacity (Max: {sequence.max_value}).")
+
+# Context
+class Sequence:
+    def __init__(self, name: str, start: int, increment: int, max_value: int):
+        self.name = name
+        self.start = start
+        self.increment = increment
+        self.max_value = max_value
+        
+        self._current_value = start
+        # Initialize default state
+        self._state: ISequenceState = ActiveState()
+        
+    def set_state(self, state: ISequenceState):
+        self._state = state
+        
+    def next_value(self) -> int:
+        return self._state.next_value(self)
+
+# --- Client Execution ---
+print("--- Creating Sequence (Max Value = 2) ---")
+seq = Sequence("user_id_seq", start=1, increment=1, max_value=2)
+
+print(f"Request 1: {seq.next_value()}") 
+print(f"Request 2: {seq.next_value()}")
+print(f"Request 3: (Expecting Failure)")
+try:
+    print(seq.next_value())
+except Exception as e:
+    print(f"Exception: {e}")
+```
+
+### 1.13. Proxy Pattern (Virtual Proxy for View)
+
+```mermaid
+classDiagram
+    %% ----------------------------------------------------
+    %% VIRTUAL PROXY PATTERN (View)
+    %% ----------------------------------------------------
+    
+    class ITableSource {
+        <<Subject / Interface>>
+        +fetch_data() List*
+    }
+
+    class PhysicalTable {
+        <<RealSubject>>
+        -data: List
+        +fetch_data() List
+    }
+
+    class View {
+        <<Proxy>>
+        +name: str
+        +query: str
+        -_engine: DatabaseEngine
+        -_cached_result: List
+        +__init__(query: str, engine: DatabaseEngine)
+        +fetch_data() List
+    }
+    
+    class DatabaseEngine {
+        <<Locator>>
+        +execute_query(query: str) List
+    }
+
+    ITableSource <|-- PhysicalTable : Implements
+    ITableSource <|-- View : Implements
+    View o--> DatabaseEngine : Asks to resolve complex queries
+    View ..> PhysicalTable : Structurally identical behavior
+```
+
+**Sequence Diagram:**
 ```mermaid
 sequenceDiagram
     participant Client
-    participant Vw as View (Virtual Proxy)
-    participant Engine as Database Engine / Schema
+    participant Vw as View (Proxy)
+    participant Engine as DatabaseEngine
     
-    %% Phase 1: Hollow initialization (Store Metadata only, no physical Table access)
-    Client->>Vw: new View("active_users", "SELECT * FROM users")
+    %% Phase 1: Hollow initialization
+    Client->>Vw: new View("active_users", query, Engine)
     activate Vw
-    Vw-->>Client: Return virtual View object 
+    Vw-->>Client: return lightweight Proxy object
     deactivate Vw
     
-    %% Phase 2: Trigger query (Proxy acts as Stand-in)
-    Client->>Vw: resolve(schema)
+    %% Phase 2: First Time Access (Heavy Evaluation)
+    Client->>Vw: fetch_data()
     activate Vw
-    Vw->>Engine: Send "SELECT *..." to Engine
-    activate Engine
-    Engine->>Engine: Scan data from actual physical Tables
-    Engine-->>Vw: Return Raw Data
-    deactivate Engine
-    
-    Vw-->>Client: Return Data (Pretending the View fetched it)
+    alt _cached_result is None
+        Vw->>Engine: execute_query(query)
+        activate Engine
+        Engine->>Engine: Scan physical Tables (RealSubjects)
+        Engine-->>Vw: Heavy Raw Data
+        deactivate Engine
+        Vw->>Vw: _cached_result = Raw Data
+    end
+    Vw-->>Client: Return Data
+    deactivate Vw
+
+    %% Phase 3: Immediate Subsequent Access
+    Client->>Vw: fetch_data()
+    activate Vw
+    Vw-->>Client: Return _cached_result (Instant!)
     deactivate Vw
 ```
 
-### 1.14. Sequence Diagram: Command Pattern (Stored Procedure)
+**Implementation Example:**
+```python
+from abc import ABC, abstractmethod
+
+# Subject Interface
+class ITableSource(ABC):
+    @abstractmethod
+    def fetch_data(self) -> list:
+        pass
+
+# Real Subject
+class PhysicalTable(ITableSource):
+    def __init__(self, name: str, data: list):
+        self.name = name
+        self.data = data
+        
+    def fetch_data(self) -> list:
+        return self.data
+
+# Database Engine to simulate heavy SQL execution
+class DatabaseEngine:
+    def execute_query(self, query: str) -> list:
+        print(f"   [Engine] Executing heavy SQL Scan across physical tables...")
+        # Simulate long-running query fetch
+        return [{"id": 1, "username": "Alice"}, {"id": 2, "username": "Bob"}]
+
+# Virtual Proxy
+class View(ITableSource):
+    def __init__(self, name: str, query: str, engine: DatabaseEngine):
+        self.name = name
+        self.query = query
+        self._engine = engine
+        self._cached_result = None
+        
+    def fetch_data(self) -> list:
+        if self._cached_result is None:
+            print(f"[Proxy] Cache miss for '{self.name}'. Offloading to RealSubject...")
+            self._cached_result = self._engine.execute_query(self.query)
+        else:
+            print(f"[Proxy] Cache hit for '{self.name}'. Returning instantly!")
+            
+        return self._cached_result
+
+# Client Execution
+engine = DatabaseEngine()
+
+print("--- 1. Declaring the View ---")
+active_users = View("active_users", "SELECT * FROM users WHERE active=1", engine)
+
+print("\\n--- 2. Client queries the View (First Run) ---")
+data = active_users.fetch_data()
+print(f"Data: {data}")
+
+print("\\n--- 3. Client queries the View (Second Run) ---")
+data2 = active_users.fetch_data()
+print(f"Data: {data2}")
+```
+
+### 1.14. Command Pattern (Stored Procedure)
+
+```mermaid
+classDiagram
+    %% ----------------------------------------------------
+    %% COMMAND PATTERN (Stored Procedure)
+    %% ----------------------------------------------------
+    
+    class ICommand {
+        <<Command / Interface>>
+        +execute()* Any
+    }
+
+    class StoredProcedure {
+        <<ConcreteCommand>>
+        +name: str
+        +body: str
+        -_engine: DatabaseEngine
+        -_params: dict
+        +__init__(name: str, body: str, engine: DatabaseEngine)
+        +bind_params(params: dict)
+        +execute() Any
+    }
+
+    class DatabaseEngine {
+        <<Receiver>>
+        +execute_sql(sql: str, params: dict) Any
+    }
+
+    class Invoker {
+        <<Invoker>>
+        -_commands: List~ICommand~
+        +add_command(cmd: ICommand)
+        +run_all()
+    }
+
+    ICommand <|-- StoredProcedure : Implements
+    StoredProcedure o--> DatabaseEngine : Knows the Receiver
+    Invoker o--> ICommand : Holds and triggers
+```
+
+**Sequence Diagram:**
 ```mermaid
 sequenceDiagram
     participant Client
+    participant Invoker as TaskQueue (Invoker)
     participant Proc as StoredProcedure (Command)
-    participant Engine as Database Execute Engine
+    participant Engine as DatabaseEngine (Receiver)
     
-    %% Encapsulate logic into static form
-    Client->>Proc: new StoredProcedure("clean_logs", "DELETE FROM logs...")
+    %% Phase 1: Setup and Parameter Binding
+    Client->>Proc: new StoredProcedure("clean_logs", "DELETE FROM logs", Engine)
     activate Proc
-    Proc-->>Client: Return Command object (Not executed yet)
+    Proc-->>Client: Proc instance
     deactivate Proc
     
-    %% Trigger command execution
-    Client->>Proc: execute(days=30)
+    Client->>Proc: bind_params({"days": 30})
+    
+    %% Phase 2: Deferred Execution via Invoker
+    Client->>Invoker: add_command(Proc)
+    Client->>Invoker: run_all()
+    activate Invoker
+    
+    Invoker->>Proc: execute()
     activate Proc
-    Proc->>Engine: Unpack "DELETE FROM" with parameters
+    
+    %% Phase 3: Receiver Execution
+    Proc->>Engine: execute_sql("DELETE FROM logs", {"days": 30})
     activate Engine
-    
-    %% Execute Engine handles 100% physical workload
-    Engine->>Engine: Check permissions, Compile, Delete physical Data
-    
-    alt SQL Logic Error / Transaction Fallback
-        Engine-->>Proc: throw QueryExecutionException
-        Proc-->>Client: Bubble up error to Client
-    else Execution Successful
-        Engine-->>Proc: return affected_rows_count
-        Proc-->>Client: Return output result
-    end
-    
+    Engine->>Engine: Perform physical deletion
+    Engine-->>Proc: return affected_rows (100)
     deactivate Engine
+    
+    Proc-->>Invoker: return 100
     deactivate Proc
+    Invoker-->>Client: Log Success
+    deactivate Invoker
+```
+
+**Implementation Example:**
+```python
+from abc import ABC, abstractmethod
+from typing import Any
+
+# Command Interface
+class ICommand(ABC):
+    @abstractmethod
+    def execute(self) -> Any:
+        pass
+
+# Receiver
+class DatabaseEngine:
+    def execute_sql(self, sql: str, params: dict) -> Any:
+        print(f"   [Engine] Executing SQL: {sql} | With Params: {params}")
+        # Physical disk operations happen here
+        return {"status": "SUCCESS", "rows_affected": 100}
+
+# Concrete Command
+class StoredProcedure(ICommand):
+    def __init__(self, name: str, body: str, engine: DatabaseEngine):
+        self.name = name
+        self.body = body
+        self._engine = engine
+        self._params = {}
+        
+    def bind_params(self, params: dict):
+        self._params.update(params)
+        
+    def execute(self) -> Any:
+        print(f"[Command] Triggering '{self.name}'...")
+        # Delegates execution to the Receiver
+        return self._engine.execute_sql(self.body, self._params)
+
+# Invoker
+class TaskQueue:
+    def __init__(self):
+        self.commands = []
+        
+    def add_command(self, cmd: ICommand):
+        self.commands.append(cmd)
+        
+    def run_all(self):
+        for cmd in self.commands:
+            result = cmd.execute()
+            print(f"[Invoker] Result: {result}")
+
+# Client Execution
+engine = DatabaseEngine()
+
+# Encapsulating the request as an object
+clean_logs_proc = StoredProcedure("clean_old_logs", "DELETE FROM logs WHERE age > :days", engine)
+clean_logs_proc.bind_params({"days": 30})
+
+update_stats_proc = StoredProcedure("refresh_stats", "UPDATE stats SET val = 0", engine)
+
+# The Invoker knows nothing about SQL, it just triggers commands
+queue = TaskQueue()
+queue.add_command(clean_logs_proc)
+queue.add_command(update_stats_proc)
+
+print("--- Invoker running batch jobs ---")
+queue.run_all()
 ```
 
 ### 1.15. High-Level Class Diagram (Structural View)
