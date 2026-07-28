@@ -1059,30 +1059,133 @@ except Exception as e:
     print(f"Caught Exception: {e}")
 ```
 
-### 1.10. Sequence Diagram: Factory Method (IndexFactory)
+### 1.9. Factory Method (IndexFactory)
+
+```mermaid
+classDiagram
+    %% ----------------------------------------------------
+    %% FACTORY METHOD PATTERN (IndexFactory)
+    %% ----------------------------------------------------
+    
+    class IndexFactory {
+        <<Creator>>
+        +create_index(idx_type: str, name: str) IIndex
+    }
+
+    class IIndex {
+        <<Product / Interface>>
+        +name: str
+        +insert(key: Any, ptr: Any)*
+        +search(key: Any)* List
+    }
+
+    class BTreeIndex {
+        <<ConcreteProduct>>
+        +insert(key: Any, ptr: Any)
+        +search(key: Any) List
+    }
+
+    class HashIndex {
+        <<ConcreteProduct>>
+        +insert(key: Any, ptr: Any)
+        +search(key: Any) List
+    }
+
+    IndexFactory ..> IIndex : Creates
+    IIndex <|-- BTreeIndex : Implements
+    IIndex <|-- HashIndex : Implements
+```
+
+**Sequence Diagram:**
 ```mermaid
 sequenceDiagram
-    participant Client as Unit Test
+    participant Client
     participant Factory as IndexFactory
     participant BTree as BTreeIndex
     participant Hash as HashIndex
     
-    Client->>Factory: create_index("BTREE", "idx_id", ["id"])
+    %% Requesting Object Creation
+    Client->>Factory: create_index("BTREE", "idx_id")
     activate Factory
+    
     alt type == "BTREE"
-        Factory->>BTree: instantiate
-        BTree-->>Factory: BTreeIndex object
+        Factory->>BTree: new BTreeIndex("idx_id")
+        BTree-->>Factory: instance
     else type == "HASH"
-        Factory->>Hash: instantiate
-        Hash-->>Factory: HashIndex object
+        Factory->>Hash: new HashIndex("idx_id")
+        Hash-->>Factory: instance
     else invalid type
         Factory-->>Client: throw ValueError
     end
-    Factory-->>Client: return Index object (BTree/Hash abstracted)
+    
+    Factory-->>Client: return IIndex
     deactivate Factory
 ```
 
-### 1.11. Sequence Diagram: Strategy Pattern (PartitionStrategy)
+**Implementation Example:**
+```python
+from abc import ABC, abstractmethod
+from typing import Any, List
+
+# Product Interface
+class IIndex(ABC):
+    def __init__(self, name: str):
+        self.name = name
+        
+    @abstractmethod
+    def insert(self, key: Any, ptr: Any) -> None:
+        pass
+        
+    @abstractmethod
+    def search(self, key: Any) -> List[Any]:
+        pass
+
+# Concrete Products
+class BTreeIndex(IIndex):
+    def insert(self, key: Any, ptr: Any) -> None:
+        print(f"[BTree] Inserting key '{key}' into B-Tree nodes.")
+
+    def search(self, key: Any) -> List[Any]:
+        print(f"[BTree] Traversing B-Tree to find '{key}'...")
+        return ["row_ptr_1"]
+
+class HashIndex(IIndex):
+    def insert(self, key: Any, ptr: Any) -> None:
+        print(f"[Hash] Hashing key '{key}' and placing into bucket.")
+
+    def search(self, key: Any) -> List[Any]:
+        print(f"[Hash] Computing hash for '{key}' to fetch from bucket...")
+        return ["row_ptr_2"]
+
+# Creator
+class IndexFactory:
+    @staticmethod
+    def create_index(idx_type: str, name: str) -> IIndex:
+        idx_type = idx_type.upper()
+        if idx_type == "BTREE":
+            return BTreeIndex(name)
+        elif idx_type == "HASH":
+            return HashIndex(name)
+        else:
+            raise ValueError(f"Unknown index type: {idx_type}")
+
+# Client Execution
+print("--- Creating B-Tree Index ---")
+btree_idx = IndexFactory.create_index("BTREE", "idx_email")
+btree_idx.insert("test@ok.com", 1024)
+
+print("\\n--- Creating Hash Index ---")
+hash_idx = IndexFactory.create_index("HASH", "idx_id")
+hash_idx.insert(42, 2048)
+
+print("\\n--- Client queries against Abstract Interface ---")
+# Client doesn't need to know if it's B-Tree or Hash
+indexes: List[IIndex] = [btree_idx, hash_idx]
+for idx in indexes:
+    idx.search("dummy_key")
+```
+
+### 1.10. Sequence Diagram: Strategy Pattern (PartitionStrategy)
 ```mermaid
 sequenceDiagram
     participant Client
@@ -1112,7 +1215,7 @@ sequenceDiagram
     deactivate Table
 ```
 
-### 1.12. State Pattern (Sequence Generator)
+### 1.11. State Pattern (Sequence Generator)
 ```mermaid
 classDiagram
     %% ----------------------------------------------------
@@ -1255,7 +1358,7 @@ except Exception as e:
     print(f"Exception: {e}")
 ```
 
-### 1.13. Proxy Pattern (Virtual Proxy for View)
+### 1.12. Proxy Pattern (Virtual Proxy for View)
 
 ```mermaid
 classDiagram
@@ -1387,7 +1490,7 @@ data2 = active_users.fetch_data()
 print(f"Data: {data2}")
 ```
 
-### 1.14. Command Pattern (Stored Procedure)
+### 1.13. Command Pattern (Stored Procedure)
 
 ```mermaid
 classDiagram
@@ -1530,7 +1633,7 @@ print("--- Invoker running batch jobs ---")
 queue.run_all()
 ```
 
-### 1.15. High-Level Class Diagram (Structural View)
+### 1.14. High-Level Class Diagram (Structural View)
 ```mermaid
 classDiagram
     %% Core Management
@@ -1591,7 +1694,7 @@ classDiagram
     IndexFactory --> Index : produces
 ```
 
-### 1.16. Detailed Class Diagram (API & Methods mapped from TDD)
+### 1.15. Detailed Class Diagram (API & Methods mapped from TDD)
 ```mermaid
 classDiagram
     %% Core Management
