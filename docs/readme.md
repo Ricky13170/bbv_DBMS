@@ -2021,7 +2021,195 @@ classDiagram
 | **P2** | **Space Allocator**<br>`StorageAllocator` | **Singleton** | There must be exactly one free-space bitmap manager per engine instance. Multiple allocators would cause double-allocation of the same page. | `StorageAllocator.instance().allocate_extent(n_pages)` atomically marks `n` pages as used in the global bitmap and returns their `PageID` list. `release_extent(page_ids)` clears the bits. `get_free_space()` returns available page count. |
 
 
-### 2.1. Sequence Diagram: Buffer Pool (Proxy Pattern)
+### 2.1. Facade Pattern (Storage Engine)
+
+```mermaid
+classDiagram
+    %% ----------------------------------------------------
+    %% FACADE PATTERN (Storage Engine Bootstrapping)
+    %% ----------------------------------------------------
+    
+    class StorageEngine {
+        <<Facade>>
+        -_status: EngineStatus
+        +file_manager: FileManager
+        +page_manager: PageManager
+        +buffer_pool: BufferPool
+        +storage_allocator: StorageAllocator
+        +initialize()
+        +shutdown()
+        +get_engine_status() EngineStatus
+    }
+    
+    class FileManager {
+        <<Low-level Subsystem>>
+        +create_file(path) FileHandle
+        +open_file(path) FileHandle
+        +read_block() bytes
+        +write_block() bool
+    }
+    class PageManager {
+        <<Low-level Subsystem>>
+        +allocate_page() PageID
+        +read_page() bytes
+        +write_page() bool
+    }
+    class BufferPool {
+        <<High-level Subsystem>>
+        +fetch_page() Page
+        +flush_page()
+        +evict_page()
+    }
+    class StorageAllocator {
+        <<Singleton Subsystem>>
+        +allocate_extent() List
+        +release_extent()
+    }
+    
+    StorageEngine --> FileManager : boots
+    StorageEngine --> PageManager : boots
+    StorageEngine --> BufferPool : boots
+    StorageEngine --> StorageAllocator : boots
+```
+
+**Sequence Diagram: Bootstrapping Flow**
+```mermaid
+sequenceDiagram
+    participant Client
+    participant Engine as StorageEngine (Facade)
+    participant FileMgr as FileManager
+    participant PageMgr as PageManager
+    participant Buffer as BufferPool
+    participant Alloc as StorageAllocator
+    
+    Client->>Engine: initialize()
+    activate Engine
+    
+    Engine->>FileMgr: new FileManager()
+    activate FileMgr
+    FileMgr-->>Engine: FileMgr Ready
+    deactivate FileMgr
+    
+    Engine->>PageMgr: new PageManager(FileMgr)
+    activate PageMgr
+    PageMgr-->>Engine: PageMgr Ready
+    deactivate PageMgr
+    
+    Engine->>Buffer: new BufferPool(PageMgr, LRU)
+    activate Buffer
+    Buffer-->>Engine: BufferPool Ready
+    deactivate Buffer
+    
+    Engine->>Alloc: get_instance()
+    activate Alloc
+    Alloc-->>Engine: Allocator Ready
+    deactivate Alloc
+    
+    Engine->>Engine: set status = RUNNING
+    Engine-->>Client: void (Success)
+    deactivate Engine
+```
+
+**Implementation Example:**
+```python
+from enum import Enum
+
+# Subsystems
+class FileManager:
+    def __init__(self, max_open_files): 
+        print(f"   [Subsystem] FileManager booted (Max files: {max_open_files})")
+
+class PageManager:
+    def __init__(self, file_manager): 
+        print("   [Subsystem] PageManager booted")
+
+class LRUPolicy: pass
+
+class BufferPool:
+    def __init__(self, page_manager, capacity, policy): 
+        print(f"   [Subsystem] BufferPool booted (Cache size: {capacity})")
+    
+    def flush_all_pages(self):
+        print("   [Subsystem] BufferPool flushing all dirty pages to disk...")
+
+class StorageAllocator:
+    @staticmethod
+    def get_instance(total_pages):
+        print("   [Subsystem] StorageAllocator booted (Singleton)")
+        return StorageAllocator()
+
+
+# Facade
+class EngineStatus(Enum):
+    STOPPED = "stopped"
+    RUNNING = "running"
+    ERROR = "error"
+
+
+class StorageEngine:
+    """
+    Facade Pattern - Provides a unified, simplified interface to boot 
+    and shut down the complex web of underlying storage subsystems.
+    """
+    def __init__(self):
+        self._status: EngineStatus = EngineStatus.STOPPED
+        
+        self.file_manager = None
+        self.page_manager = None
+        self.buffer_pool = None
+        self.storage_allocator = None
+
+    def initialize(self, max_open_files=100, buffer_capacity=256, total_pages=1024):
+        if self._status == EngineStatus.RUNNING: return
+
+        try:
+            # 1. Init Disk IO 
+            self.file_manager = FileManager(max_open_files)
+            self.page_manager = PageManager(self.file_manager)
+            
+            # 2. Init Cache proxy
+            eviction_policy = LRUPolicy()
+            self.buffer_pool = BufferPool(self.page_manager, buffer_capacity, eviction_policy)
+            
+            # 3. Init Space allocation tracker
+            self.storage_allocator = StorageAllocator.get_instance(total_pages)
+
+            self._status = EngineStatus.RUNNING
+            print("[Facade] StorageEngine initialized and ready.")
+            
+        except Exception as e:
+            self._status = EngineStatus.ERROR
+            raise Exception(f"Failed to boot: {e}")
+
+    def shutdown(self):
+        if self._status != EngineStatus.RUNNING: return
+
+        print("[Facade] Orchestrating safe shutdown...")
+        if self.buffer_pool:
+            self.buffer_pool.flush_all_pages()
+            
+        self.buffer_pool = None
+        self.page_manager = None
+        self.file_manager = None
+        
+        self._status = EngineStatus.STOPPED
+
+# Client Execution
+if __name__ == "__main__":
+    print("--- 1. Client Starts System ---")
+    db_engine = StorageEngine()
+    print(f"Status before init: {db_engine.get_engine_status().name}")
+
+    print("\n--- 2. Bootstrapping Subsystems ---")
+    db_engine.initialize()
+    print(f"Status after init: {db_engine.get_engine_status().name}")
+
+    print("\n--- 3. Graceful Shutdown ---")
+    db_engine.shutdown()
+    print(f"Status after shutdown: {db_engine.get_engine_status().name}")
+```
+
+### 2.2. Sequence Diagram: Buffer Pool (Proxy Pattern)
 ```mermaid
 sequenceDiagram
     participant Test as Unit Test
