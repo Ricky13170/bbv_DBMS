@@ -1185,34 +1185,161 @@ for idx in indexes:
     idx.search("dummy_key")
 ```
 
-### 1.10. Sequence Diagram: Strategy Pattern (PartitionStrategy)
+### 1.10. Strategy Pattern (PartitionStrategy)
+
+```mermaid
+classDiagram
+    %% ----------------------------------------------------
+    %% STRATEGY PATTERN (Partition Routing)
+    %% ----------------------------------------------------
+    
+    class Table {
+        <<Context>>
+        +name: str
+        -_partition_strategy: IPartitionStrategy
+        -partitions: List~Table~
+        +set_partition_strategy(strategy: IPartitionStrategy)
+        +insert_row(row: dict)
+    }
+
+    class IPartitionStrategy {
+        <<Strategy / Interface>>
+        +route_row(row: dict)* str
+    }
+
+    class RangePartitionStrategy {
+        <<ConcreteStrategy>>
+        -ranges: dict
+        +route_row(row: dict) str
+    }
+
+    class HashPartitionStrategy {
+        <<ConcreteStrategy>>
+        -modulo: int
+        +route_row(row: dict) str
+    }
+
+    Table o--> IPartitionStrategy : Delegates routing
+    IPartitionStrategy <|-- RangePartitionStrategy : Implements
+    IPartitionStrategy <|-- HashPartitionStrategy : Implements
+```
+
+**Sequence Diagram:**
 ```mermaid
 sequenceDiagram
     participant Client
-    participant Table
-    participant PStrat as PartitionStrategy
-    participant PartA as Table (Partition Q1)
+    participant MainTable as Table (Context)
+    participant Strategy as RangePartitionStrategy
+    participant PartTable as Table (Partition Q1)
     
-    %% Setup Range (Admin configures ahead)
-    Client->>PStrat: add_range("Q1", "2023-01", "2023-03")
+    %% Setup
+    Client->>MainTable: insert_row({"date": "2023-02-14"})
+    activate MainTable
     
-    %% Insertion (Pushing actual data)
-    Client->>Table: insert_row(row)
-    activate Table
-    Table->>PStrat: route_row(row.date)
-    activate PStrat
+    %% Delgate Routing
+    MainTable->>Strategy: route_row({"date": "2023-02-14"})
+    activate Strategy
+    Strategy->>Strategy: Evaluate ranges
+    Strategy-->>MainTable: return "partition_Q1"
+    deactivate Strategy
     
-    alt In range Q1
-        PStrat-->>Table: return "Q1"
-        Table->>PartA: insert_row(row)
-    else Out of bounds / Range not found
-        PStrat-->>Table: throw PartitionNotFoundException
-        Table-->>Client: Throw Exception for Client to handle
-    end
-    deactivate PStrat
+    %% Proxy Insert
+    MainTable->>PartTable: insert_row({"date": "2023-02-14"})
+    activate PartTable
+    PartTable-->>MainTable: Success
+    deactivate PartTable
     
-    Table-->>Client: void
-    deactivate Table
+    MainTable-->>Client: Success
+    deactivate MainTable
+```
+
+**Implementation Example:**
+```python
+from abc import ABC, abstractmethod
+
+# Strategy Interface
+class IPartitionStrategy(ABC):
+    @abstractmethod
+    def route_row(self, row: dict) -> str:
+        """Returns the name of the physical partition table to store this row."""
+        pass
+
+# Concrete Strategies
+class RangePartitionStrategy(IPartitionStrategy):
+    def __init__(self, partition_key: str, ranges: dict):
+        self.partition_key = partition_key
+        self.ranges = ranges
+
+    def route_row(self, row: dict) -> str:
+        val = row.get(self.partition_key)
+        for part_name, (min_val, max_val) in self.ranges.items():
+            if min_val <= val <= max_val:
+                return part_name
+                
+        raise Exception(f"PartitionNotFound: Value {val} falls out of defined boundaries.")
+
+class HashPartitionStrategy(IPartitionStrategy):
+    def __init__(self, partition_key: str, total_partitions: int):
+        self.partition_key = partition_key
+        self.total_partitions = total_partitions
+
+    def route_row(self, row: dict) -> str:
+        val = row.get(self.partition_key)
+        bucket_id = hash(val) % self.total_partitions
+        return f"partition_hash_{bucket_id}"
+
+# Context
+class Table:
+    def __init__(self, name: str):
+        self.name = name
+        self._partition_strategy: IPartitionStrategy = None
+        self._partitions = {} 
+
+    def set_partition_strategy(self, strategy: IPartitionStrategy):
+        self._partition_strategy = strategy
+
+    def add_partition_table(self, part_name: str, table_instance: 'Table'):
+        self._partitions[part_name] = table_instance
+
+    def insert_row(self, row: dict):
+        if self._partition_strategy:
+            # 1. Routing Logic (Delegated to Strategy)
+            target_part = self._partition_strategy.route_row(row)
+            print(f"[Table '{self.name}'] Actively routing row to partition '{target_part}'...")
+            
+            # 2. Forward to physical partition
+            sub_table = self._partitions.get(target_part)
+            if not sub_table:
+                raise Exception(f"Physical partition '{target_part}' not initialized!")
+            
+            sub_table.insert_row(row)
+        else:
+            print(f"[Table '{self.name}'] Inserting directly into self.")
+
+# Client Execution
+print("--- 1. Setting up Partitions ---")
+sales_table = Table("sales_data")
+
+sales_table.add_partition_table("Q1", Table("sales_q1"))
+sales_table.add_partition_table("Q2", Table("sales_q2"))
+
+print("\\n--- 2. Applying Range Strategy ---")
+range_strat = RangePartitionStrategy(partition_key="month", ranges={"Q1": (1, 3), "Q2": (4, 6)})
+sales_table.set_partition_strategy(range_strat)
+
+sales_table.insert_row({"id": 101, "month": 2, "amount": 500})
+sales_table.insert_row({"id": 102, "month": 5, "amount": 990}) 
+
+print("\\n--- 3. Testing Exception (Q3 out of bounds) ---")
+try:
+    sales_table.insert_row({"id": 103, "month": 8, "amount": 200})
+except Exception as e:
+    print(f"Exception Caught: {e}")
+
+print("\\n--- 4. Hot-swapping to Hash Strategy ---")
+hash_strat = HashPartitionStrategy(partition_key="id", total_partitions=4)
+# Assigning overrides behavior instantly!
+sales_table.set_partition_strategy(hash_strat)
 ```
 
 ### 1.11. State Pattern (Sequence Generator)
@@ -1783,6 +1910,7 @@ classDiagram
         <<State>>
         +start: int
         +increment: int
+        +max_value: int
         +next_value() int
     }
     class StoredProcedure {
@@ -1837,7 +1965,7 @@ classDiagram
     }
     class IndexFactory {
         <<Factory Method>>
-        +create(type, name, columns) Index
+        +create_index(idx_type: str, name: str) IIndex
     }
     class Index {
         <<Factory Product>>
@@ -1879,12 +2007,19 @@ classDiagram
 
 ---
 
-## TABLE 2: STORAGE & TRANSACTION ENGINE (Physical Hardware Layer)
+## TABLE 2: STORAGE ENGINE (Physical Hardware Layer)
 
-| Feature / Class | Design Pattern | Problem & Rationale | Unit Test (TDD) Implementation Strategy |
-| :--- | :--- | :--- | :--- |
-| **Memory / Cache Management**<br>`BufferPoolManager` | **Proxy / Object Pool** | Direct Disk I/O is slow. Serves as a gateway to recycle RAM memory and minimize disk hits. | Generate mock Page Requests, testing the LRU Eviction behavior when the RAM buffer pool reaches full capacity. |
-| **ACID Recovery**<br>`LogCommand`, `WAL` | **Command / Observer** | Wraps Undo/Redo operations as executable Commands. Triggers the Write-Ahead Log (WAL) to flush to disk upon Commit. | Create a pseudo-array of Commands (Insert, Update), simulate a system crash, and verify the WAL file reconstructs the uncommitted states. |
+| Priority | Feature / Class | Design Pattern | Problem & Architecture Need | Application / Usage |
+| :---: | :--- | :--- | :--- | :--- |
+| **P0** | **Storage Facade**<br>`StorageEngine` | **Facade** | Clients (e.g., RecordManager) should not need to individually orchestrate FileManager + PageManager + BufferPool. A single unified entry point simplifies initialization, shutdown, and health-check. | `StorageEngine.initialize()` boots all subsystems in order. `StorageEngine.shutdown()` cleanly flushes all dirty pages and closes all file handles before exit. |
+| **P0** | **File I/O Layer**<br>`FileManager`<br>`FileHandle` | **Object Pool** (FileHandle Pool) | OS file descriptors are finite and expensive to open/close repeatedly. Pooling `FileHandle` objects avoids `MaxOpenFilesExceededException` and re-opening overhead. | `FileManager.open_file(path)` returns a cached `FileHandle` if already open, otherwise carves a new handle from the pool. `close_file()` returns the handle slot. ✅ *Already implemented.* |
+| **P0** | **Page I/O Layer**<br>`PageManager`<br>`PageID` | *(Low-level Service)* | Raw page-level read/write abstraction over `FileManager`. Decouples all upper layers from physical byte offsets and file seek logic. | `PageManager.read_page(PageID)` → 4 KB `bytes`. `write_page(PageID, data)`. `allocate_page(path)` grows the file and returns the next `PageID`. ✅ *Already implemented.* |
+| **P0** | **Buffer / RAM Cache**<br>`BufferPool`<br>`IEvictionPolicy`<br>`LRUPolicy` / `ClockPolicy` | **Proxy** (for PageManager)<br>**Strategy** (Eviction Algorithm) | Direct disk I/O for every read/write is 1000× slower than RAM. `BufferPool` stands as a caching Proxy in front of `PageManager`. The eviction algorithm (LRU vs CLOCK) must be swappable without touching cache logic → Strategy. | `BufferPool.fetch_page(page_id)` checks the RAM frame table first (cache hit → return instantly). On a miss, delegates to `PageManager`, loads the page, and pins it. `evict_page()` calls `IEvictionPolicy.select_victim()`. |
+| **P1** | **Record Storage**<br>`RecordManager` | **Template Method** | All record operations (insert/read/update/delete) share the same skeleton: locate the page → validate schema → perform mutation → mark page dirty. The physical byte-packing format differs per table. | `RecordManager.insert_record(table_id, row)` calls `_find_free_slot()` (abstract) → `_serialize(row)` (abstract) → common `page.mark_dirty()`. Slotted-page and fixed-length formats override the abstract steps. |
+| **P1** | **Index Lifecycle**<br>`IndexManager` | **Factory Method** | Creating and rebuilding different index types (BTree, Hash) must be decoupled from the caller. `IndexManager` plays the Creator role. | `IndexManager.create_index("BTREE", "idx_email", table_id)` delegates to `IndexFactory.create_index()` and registers the metadata. `rebuild_index(name)` drops and recreates using the same factory pipeline. |
+| **P1** | **B-Tree Structure**<br>`BTree`<br>`BTreeNode` | **Composite** | A B-Tree is a recursive tree of nodes. Internal nodes (Composites) hold separator keys and child pointers; leaf nodes (Leaves) hold actual record pointers. Traversal code must be uniform across both types. | `BTree.insert_node(key, ptr)` recurses via `BTreeNode.insert()`, calling `split_node()` when the page is full. `search_key(key)` traverses down to the leaf. `merge_node()` is triggered on under-full deletion. |
+| **P2** | **Space Allocator**<br>`StorageAllocator` | **Singleton** | There must be exactly one free-space bitmap manager per engine instance. Multiple allocators would cause double-allocation of the same page. | `StorageAllocator.instance().allocate_extent(n_pages)` atomically marks `n` pages as used in the global bitmap and returns their `PageID` list. `release_extent(page_ids)` clears the bits. `get_free_space()` returns available page count. |
+
 
 ### 2.1. Sequence Diagram: Buffer Pool (Proxy Pattern)
 ```mermaid
