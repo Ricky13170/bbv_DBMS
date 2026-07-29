@@ -2210,25 +2210,186 @@ if __name__ == "__main__":
     print(f"Status after shutdown: {db_engine.get_engine_status().name}")
 ```
 
-### 2.2. Sequence Diagram: Buffer Pool (Proxy Pattern)
+### 2.2a. Proxy Pattern (Buffer Pool Cache)
+
+```mermaid
+classDiagram
+    %% PROXY PATTERN (BufferPool)
+    class IPageSource {
+        <<Subject>>
+        +fetch_page(page_id) Page
+    }
+    class PageManager {
+        <<RealSubject>>
+        +fetch_page(page_id) Page
+    }
+    class BufferPool {
+        <<Proxy>>
+        -_real_subject: PageManager
+        -_cache: Map
+        +fetch_page(page_id) Page
+    }
+
+    IPageSource <|-- PageManager
+    IPageSource <|-- BufferPool
+    BufferPool o-- PageManager : wraps
+```
+
+**Sequence Diagram: Proxy Hit vs Miss**
 ```mermaid
 sequenceDiagram
-    participant Test as Unit Test
-    participant Pool as BufferPoolManager
-    participant Disk as FileManager
+    participant Client
+    participant Proxy as BufferPool
+    participant Disk as PageManager
+
+    Client->>Proxy: fetch_page(5)
+    activate Proxy
     
-    Test->>Pool: fetch_page(id=5)
-    activate Pool
-    Pool->>Pool: is in Cache (RAM)?
-    alt Yes
-        Pool-->>Test: return Page(5)
-    else No (Cache Miss)
-        Pool->>Disk: read_block(5)
-        Disk-->>Pool: data
-        Pool->>Pool: LRU.evict() if full
-        Pool-->>Test: return Page(5)
+    Proxy->>Proxy: check RAM
+    alt Cache Miss
+        Proxy->>Disk: fetch_page(5)
+        activate Disk
+        Disk-->>Proxy: raw_bytes
+        deactivate Disk
+        Proxy->>Proxy: load to RAM
     end
-    deactivate Pool
+    
+    Proxy-->>Client: return Page(5)
+    deactivate Proxy
+```
+
+**Implementation Example:**
+```python
+from abc import ABC, abstractmethod
+
+# Proxy Pattern
+class IPageSource(ABC):
+    @abstractmethod
+    def fetch_page(self, page_id: str): pass
+
+class PageManager(IPageSource):
+    def fetch_page(self, page_id: str):
+        print(f" RealSubject Disk I/O: Reading bytes for {page_id}...")
+        return f"<PageData:{page_id}>"
+
+class BufferPool(IPageSource):
+    def __init__(self, page_manager: PageManager):
+        self._real_subject = page_manager
+        self._cache = {}
+
+    def fetch_page(self, page_id: str):
+        if page_id in self._cache:
+            print(f"Proxy RAM Cache HIT for {page_id}")
+        else:
+            print(f"Proxy Cache MISS. Delegating to RealSubject...")
+            self._cache[page_id] = self._real_subject.fetch_page(page_id)
+        return self._cache[page_id]
+
+# Client Execution
+if __name__ == "__main__":
+    proxy = BufferPool(PageManager())
+    
+    print("--- 1. First fetch (Miss) ---")
+    proxy.fetch_page("pg_1")
+    
+    print("\n--- 2. Second fetch (Hit) ---")
+    proxy.fetch_page("pg_1")
+```
+
+---
+
+### 2.2b. Strategy Pattern (Eviction Policy)
+
+```mermaid
+classDiagram
+    %% STRATEGY PATTERN (Eviction Algorithm)
+    class BufferPool {
+        <<Context>>
+        -_eviction_policy: IEvictionPolicy
+        +evict_page()
+    }
+    class IEvictionPolicy {
+        <<Strategy>>
+        +record_access(page_id)
+        +select_victim() PageID
+    }
+    class LRUPolicy {
+        <<ConcreteStrategy>>
+    }
+    class ClockPolicy {
+        <<ConcreteStrategy>>
+    }
+
+    BufferPool o-- IEvictionPolicy : delegates eviction
+    IEvictionPolicy <|-- LRUPolicy
+    IEvictionPolicy <|-- ClockPolicy
+```
+
+**Sequence Diagram: Strategy Delegation**
+```mermaid
+sequenceDiagram
+    participant Pool as BufferPool Context
+    participant Strat as IEvictionPolicy
+
+    Note over Pool, Strat: 1. Logging Access Timestamp
+    Pool->>Strat: record_access("pg_1")
+    Pool->>Strat: record_access("pg_2")
+    
+    Note over Pool, Strat: 2. Cache is Full! Triggering Eviction
+    Pool->>Strat: select_victim()
+    Strat-->>Pool: return Victim("pg_1")
+    Pool->>Pool: flush & remove "pg_1"
+```
+
+**Implementation Example:**
+```python
+from abc import ABC, abstractmethod
+
+# Strategy Pattern
+class IEvictionPolicy(ABC):
+    @abstractmethod
+    def record_access(self, page_id: str): pass
+    @abstractmethod
+    def select_victim(self) -> str: pass
+
+class LRUPolicy(IEvictionPolicy):
+    def record_access(self, page_id: str):
+        print(f"   [Strategy LRU] Tracking access to {page_id}")
+        
+    def select_victim(self) -> str:
+        print("   [Strategy LRU] Evicting least recently used page")
+        return "pg_1"
+
+class ClockPolicy(IEvictionPolicy):
+    def record_access(self, page_id: str):
+        print(f"   [Strategy CLOCK] Setting ref bit = 1 for {page_id}")
+        
+    def select_victim(self) -> str:
+        print("   [Strategy CLOCK] Sweeping hand to find ref bit = 0")
+        return "pg_2"
+
+class BufferPoolContext:
+    def __init__(self, policy: IEvictionPolicy):
+        self.policy = policy
+        
+    def execute_fetch(self, page_id: str):
+        print(f"[Context] Fetching {page_id}...")
+        self.policy.record_access(page_id)
+        
+    def execute_eviction(self):
+        print(f"[Context] Cache full! Asking Strategy who to kill...")
+        victim = self.policy.select_victim()
+        print(f"[Context] Execution: Freed up {victim}")
+
+# Client Execution
+if __name__ == "__main__":
+    print("--- Boot Context with LRU Strategy ---")
+    pool = BufferPoolContext(LRUPolicy())
+    
+    pool.execute_fetch("pg_1")
+    pool.execute_fetch("pg_2")
+    
+    pool.execute_eviction()
 ```
 
 ---
