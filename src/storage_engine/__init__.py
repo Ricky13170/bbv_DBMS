@@ -7,3 +7,6 @@ from .record_manager import RecordManager, RecordID, RecordNotFoundException, Re
 from .btree import BTree, BTreeNode, InternalNode, LeafNode, KeyNotFoundException, DuplicateKeyException
 from .index_manager import IndexManager, IndexNotFoundException, IndexAlreadyExistsException
 from .storage_allocator import StorageAllocator, OutOfSpaceException, InvalidExtentException
+from .record_iterator import IRecordIterator, TableIterator, BTreeIterator
+from .transaction_log import ILogRecord, InsertLog, UpdateLog, DeleteLog
+from .lock_manager import LockManager, LockMode
