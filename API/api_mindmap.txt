@@ -1,0 +1,56 @@
+DBMS REST API v1
+│
+├── /system                      
+│   ├── GET    /status           
+│   ├── GET    /storage         
+│   ├── GET    /transactions     
+│   └── GET    /locks         
+│
+├── /databases               
+│   ├── GET    /             
+│   ├── POST   /               
+│   └── GET    /{db}           
+│
+├── /schemas                    
+│   ├── GET    /                
+│   ├── POST   /                
+│   └── DELETE /{schema}        
+│
+├── /tables                    
+│   ├── GET    /                
+│   ├── POST   /                 
+│   ├── GET    /{table}          
+│   └── DELETE /{table}          
+│
+├── /indexes               
+│   ├── GET    /               
+│   ├── POST   /               
+│   └── DELETE /{index}        
+│
+├── /partitions            
+│   ├── GET    /              
+│   └── POST   /              
+│
+├── /views                   
+│   ├── GET    /       
+│   ├── POST   /             
+│   └── DELETE /{view}          
+│
+├── /sequences           
+│   ├── GET    /             
+│   ├── POST   /              
+│   └── POST   /{seq}/nextval   
+│
+├── /procedures                
+│   ├── GET    /                 
+│   ├── POST   /                
+│   └── POST   /{proc}/execute 
+│
+├── /records                 
+│   ├── GET    /             
+│   ├── POST   /                
+│   ├── PUT    /{id}            
+│   └── DELETE /{id}            
+│
+└── /query                    
+    └── POST   /execute        

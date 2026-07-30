@@ -6,6 +6,10 @@
 
 ![DBMS Class Mindmap](picture/class_mindmap.png)
 
+## DBMS API Mindmap
+
+![DBMS API Mindmap](picture/api_mindmap.jpg)
+
 ## DBMS Unit Tests Overview
 
 ### Storage Management Tests
