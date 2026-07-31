@@ -9,13 +9,26 @@ Below is a comprehensive list of the APIs that will be built and applied in the 
 | Domain | Method | Endpoint | Description | Simple Example | Advanced Example |
 | :--- | :--- | :--- | :--- | :--- | :--- |
 | **Auth** | POST | `/auth/login` | Authenticate & Issue Token | `/auth/login` | (Issue Refresh/Access JWT securely) |
+| **Auth** | POST | `/auth/register` | Register new user | `/auth/register` | (Register with role and profile data) |
 | **System** | GET | `/system/status` | DBMS health check | `/system/status` | `/system/status?include_disk_usage=true` |
+| **Database** | POST | `/databases` | Create a new database | `/databases` (Body: {name: 'SalesDB'}) | |
 | **Database** | GET | `/databases` | List databases | `/databases` | `/databases?page=1&pageSize=20&filter=status eq 'Online'&sort=name` |
 | **Database** | GET | `/databases/{dbName}` | Get database details | `/databases/SalesDB` | `/databases/SalesDB?expand=schemas,tables&fields=name,size,status` |
+| **Database** | DELETE | `/databases/{dbName}` | Drop database | `/databases/SalesDB` | |
+| **Schema** | POST | `/databases/{dbName}/schemas` | Create schema | `/databases/SalesDB/schemas` (Body: {name: 'sales'}) | |
 | **Schema** | GET | `/databases/{dbName}/schemas` | List schemas | `/databases/SalesDB/schemas` | `/databases/SalesDB/schemas?search=sales&page=1&pageSize=20` |
+| **Schema** | DELETE | `/databases/{dbName}/schemas/{schemaName}` | Drop schema | `/databases/SalesDB/schemas/sales` | |
+| **Table** | POST | `/schemas/{schema}/tables` | Create Table | `/schemas/sales/tables` (Body: schema def) | |
 | **Table** | GET | `/schemas/{schema}/tables` | List tables | `/schemas/sales/tables` | `/schemas/sales/tables?filter=rowCount gt 100000&sort=-rowCount` |
+| **Table** | DELETE | `/schemas/{schema}/tables/{tableName}` | Drop table | `/schemas/sales/tables/Customers` | |
+| **Column** | POST | `/tables/{table}/columns` | Add Column | `/tables/Customers/columns` (Body: column def) | |
 | **Column** | GET | `/tables/{table}/columns` | List columns | `/tables/Customers/columns` | `/tables/Customers/columns?fields=name,type,isNullable` |
-| **Row** | GET | `/tables/{table}/rows` | Query table data | `/tables/Customers/rows` | `/tables/Customers/rows?page=2&pageSize=50&filter=country eq 'Australia' and status eq 'Active'&sort=-createdDate&fields=id,name` |
+| **Column** | PUT | `/tables/{table}/columns/{column}` | Alter Column | `/tables/Customers/columns/age` (Body) | |
+| **Column** | DELETE | `/tables/{table}/columns/{column}` | Drop Column | `/tables/Customers/columns/age` | |
+| **Row** | POST | `/tables/{table}/rows` | Insert Row | `/tables/Customers/rows` (Body) | Insert multiple rows (batch insert) |
+| **Row** | GET | `/tables/{table}/rows` | Query table data | `/tables/Customers/rows` | `/tables/Customers/rows?page=2&pageSize=50&filter=country eq 'Australia'` |
+| **Row** | PUT | `/tables/{table}/rows/{rowId}` | Update Row | `/tables/Customers/rows/123` (Body) | |
+| **Row** | DELETE | `/tables/{table}/rows/{rowId}` | Delete Row | `/tables/Customers/rows/123` | |
 | **Query** | POST | `/query/execute` | Execute SQL | `SELECT * FROM Customers` (Body) | Multi-table JOIN with pagination, aggregation, filtering, and sorting (Body) |
 | **Query** | POST | `/query` | Execute dynamic query | Select from one table | Join Customers -> Orders -> OrderItems -> Products with groupBy, having, and includeTotal=true |
 | **Index** | GET | `/tables/{table}/indexes` | List indexes | `/tables/Orders/indexes` | `/tables/Orders/indexes?fields=name,type,fragmentation` |
