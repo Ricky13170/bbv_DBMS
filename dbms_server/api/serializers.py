@@ -1,10 +1,6 @@
 from rest_framework import serializers
 
 class LoginSerializer(serializers.Serializer):
-    """
-    Serializer làm nhiệm vụ canh gác (Validation) cho cổng Login.
-    Diễn giải: Trước khi data lọt được vào Views, nó phải qua đây!
-    """
     username = serializers.CharField(max_length=50, required=True)
     password = serializers.CharField(
         max_length=128, 
@@ -19,9 +15,6 @@ class LoginSerializer(serializers.Serializer):
 
 
 class TableMetadataSerializer(serializers.Serializer):
-    """
-    Serializer ép kiểu mớ bùi nhùi từ StorageEngine thành JSON chuẩn chỉnh.
-    """
     table_name = serializers.CharField()
     database = serializers.CharField()
     columns = serializers.ListField(child=serializers.CharField())

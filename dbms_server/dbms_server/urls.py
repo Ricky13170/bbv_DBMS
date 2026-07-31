@@ -17,11 +17,18 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path
 
-# Kéo thẳng các View của chúng ta từ ngoài vào (Đã cấu hình nhờ sys.path ở trên)
-from API.views import LoginAPIView, SystemStatusAPIView, TableLoadAPIView
+# Kéo thẳng các View từ app 'api' của chúng ta 
+from api.views import LoginAPIView, SystemStatusAPIView, TableLoadAPIView
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    
+    # Swagger endpoints
+    path('api/schema/', SpectacularAPIView.as_view(), name='schema'),
+    path('api/docs/', SpectacularSwaggerView.as_view(url_name='schema'), name='swagger-ui'),
+
+    # Application APIs
     path('api/v1/login', LoginAPIView.as_view()),
     path('api/v1/system/status', SystemStatusAPIView.as_view()),
     path('api/v1/databases/<str:db_name>/schemas/<str:schema_name>/tables/<str:table_name>', TableLoadAPIView.as_view()),
