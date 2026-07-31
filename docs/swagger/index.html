@@ -3,7 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>DBMS REST API Docs</title>
+    <title>DBMS REST API</title>
     <!-- Trỏ link tải Style CSS của Swagger -->
     <link rel="stylesheet" type="text/css" href="https://unpkg.com/swagger-ui-dist@5.0.0/swagger-ui.css" />
 </head>
@@ -14,11 +14,11 @@
     <!-- Trỏ link tải Logic JS của Swagger -->
     <script src="https://unpkg.com/swagger-ui-dist@5.0.0/swagger-ui-bundle.js"></script>
 
-    <!-- Cấu hình để nó load file schema.yml của bạn -->
+    <!-- Cấu hình để nó load file dbms-openapi.json của bạn -->
     <script>
         window.onload = () => {
             window.ui = SwaggerUIBundle({
-                url: './schema.yml', // Trỏ thẳng vào file openapi yaml trong cùng thư mục
+                url: './dbms-openapi.json', // Thay vì yaml, giờ ta load json cho xịn
                 dom_id: '#swagger-ui',
             });
         };
